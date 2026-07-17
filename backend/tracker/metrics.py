@@ -14,6 +14,7 @@ Two metric kinds:
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.utils.translation import gettext as _
 
 
 @dataclass(frozen=True)
@@ -33,19 +34,19 @@ def get_metric(key: str) -> Metric:
     try:
         data = settings.METRICS[key]
     except KeyError:
-        raise ValueError(f"Métrica desconocida: {key!r}")
+        raise ValueError(_("Unknown metric: %s") % key)
     return Metric(**data)
 
 
 def get_session_metric(key: str) -> Metric:
     metric = get_metric(key)
     if metric.kind != settings.KIND_SESSION:
-        raise ValueError(f"La métrica {key!r} no es de tipo sesión")
+        raise ValueError(_("Metric %s is not a session metric") % key)
     return metric
 
 
 def get_measurement_metric(key: str) -> Metric:
     metric = get_metric(key)
     if metric.kind != settings.KIND_MEASUREMENT:
-        raise ValueError(f"La métrica {key!r} no es de tipo medición")
+        raise ValueError(_("Metric %s is not a measurement metric") % key)
     return metric

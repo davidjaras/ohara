@@ -10,6 +10,9 @@ class Session(models.Model):
     started_at/ended_at.
     """
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions"
+    )
     metric = models.CharField(
         max_length=50, default=settings.DEFAULT_SESSION_METRIC, db_index=True
     )
@@ -28,17 +31,27 @@ class Session(models.Model):
 
 
 class ActiveTimer(models.Model):
-    """The in-progress timer (at most one per metric).
+    """The in-progress timer (at most one per user and metric).
 
     Persisted so a browser refresh or server restart never loses the session.
     `running_since` is null while paused; `accumulated_seconds` holds the
     segments already run before the last pause.
     """
 
-    metric = models.CharField(max_length=50, unique=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="active_timers"
+    )
+    metric = models.CharField(max_length=50)
     started_at = models.DateTimeField()
     accumulated_seconds = models.PositiveIntegerField(default=0)
     running_since = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "metric"], name="unique_timer_per_user_metric"
+            ),
+        ]
 
     @property
     def is_paused(self) -> bool:
@@ -58,6 +71,9 @@ class ActiveTimer(models.Model):
 class Measurement(models.Model):
     """A point-in-time value of a "measurement"-kind metric (e.g. peso)."""
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="measurements"
+    )
     metric = models.CharField(max_length=50, db_index=True)
     date = models.DateField(db_index=True)
     value = models.DecimalField(max_digits=8, decimal_places=2)
@@ -78,13 +94,18 @@ class WeeklyGoal(models.Model):
     evaluated against the goal that was in effect back then.
     """
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="weekly_goals"
+    )
     metric = models.CharField(max_length=50, db_index=True)
     week_start = models.DateField()
     minutes = models.PositiveIntegerField()
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["metric", "week_start"], name="unique_goal_per_week"),
+            models.UniqueConstraint(
+                fields=["user", "metric", "week_start"], name="unique_goal_per_user_week"
+            ),
         ]
 
     def __str__(self) -> str:

@@ -1,0 +1,52 @@
+{% load i18n %}<!doctype html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}ohara{% endblock %}</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100svh; display: grid; place-items: center;
+    background: #0e0f10; color: #f5f6f7;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .card {
+    width: min(92vw, 380px); background: #151617;
+    border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px;
+    padding: 28px; box-sizing: border-box;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 18px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #3ecf8e; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  .muted { color: #9aa0a6; font-size: .875rem; }
+  form div { margin-top: 14px; }
+  label { display: block; font-size: .875rem; font-weight: 500; margin: 14px 0 6px; }
+  form div label { margin-top: 0; }
+  input:not([type=hidden]) {
+    width: 100%; box-sizing: border-box; background: #1b1c1e;
+    border: 1px solid rgba(255, 255, 255, .12); border-radius: 8px;
+    color: inherit; padding: 9px 11px; font-size: .9rem;
+  }
+  input:focus { outline: 2px solid rgba(62, 207, 142, .5); border-color: transparent; }
+  button {
+    margin-top: 18px; width: 100%; background: #3ecf8e; color: #0b241a;
+    font-weight: 600; border: 0; border-radius: 8px; padding: 10px;
+    font-size: .9rem; cursor: pointer;
+  }
+  button:hover { background: #34b97e; }
+  a { color: #3ecf8e; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .errorlist { color: #f87171; font-size: .85rem; padding-left: 1.1rem; margin: 8px 0 0; }
+  .helptext { color: #9aa0a6; font-size: .8rem; display: block; margin-top: 4px; }
+  .helptext ul { margin: 4px 0 0; padding-left: 1.1rem; }
+  .links { margin-top: 14px; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand"><span class="dot"></span> ohara</div>
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

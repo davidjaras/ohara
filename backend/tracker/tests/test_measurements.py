@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
 
 import pytest
-from rest_framework.test import APIClient
 
 from tracker import services
 from tracker.models import Measurement
@@ -12,33 +11,31 @@ from tracker.models import Measurement
 pytestmark = pytest.mark.django_db
 
 
-@pytest.fixture
-def client() -> APIClient:
-    return APIClient()
-
-
 class TestMeasurementServices:
-    def test_log_measurement(self):
-        row = services.log_measurement("peso", date(2026, 7, 6), Decimal("78.40"), "post vacaciones")
+    def test_log_measurement(self, user):
+        row = services.log_measurement(
+            user, "peso", date(2026, 7, 6), Decimal("78.40"), "post vacaciones"
+        )
         assert row.value == Decimal("78.40")
         assert row.note == "post vacaciones"
+        assert row.user == user
 
-    def test_rejects_session_metric(self):
+    def test_rejects_session_metric(self, user):
         with pytest.raises(ValueError):
-            services.log_measurement("estudio", date(2026, 7, 6), Decimal("78.40"))
+            services.log_measurement(user, "estudio", date(2026, 7, 6), Decimal("78.40"))
 
-    def test_rejects_unknown_metric(self):
+    def test_rejects_unknown_metric(self, user):
         with pytest.raises(ValueError):
-            services.log_measurement("altura", date(2026, 7, 6), Decimal("1.80"))
+            services.log_measurement(user, "altura", date(2026, 7, 6), Decimal("1.80"))
 
-    def test_session_kind_guards_reject_measurement_metric(self):
+    def test_session_kind_guards_reject_measurement_metric(self, user):
         now = datetime(2026, 7, 6, 10, 0, tzinfo=dt_timezone.utc)
         with pytest.raises(ValueError):
-            services.start_timer("peso", now)
+            services.start_timer(user, "peso", now)
         with pytest.raises(ValueError):
-            services.log_manual_session("peso", date(2026, 7, 6), 30)
+            services.log_manual_session(user, "peso", date(2026, 7, 6), 30)
         with pytest.raises(ValueError):
-            services.set_goal("peso", 100, date(2026, 7, 6))
+            services.set_goal(user, "peso", 100, date(2026, 7, 6))
 
 
 class TestMeasurementApi:

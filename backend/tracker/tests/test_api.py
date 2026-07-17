@@ -12,9 +12,25 @@ from tracker.models import Session
 pytestmark = pytest.mark.django_db
 
 
-@pytest.fixture
-def client() -> APIClient:
-    return APIClient()
+class TestAuthRequired:
+    @pytest.mark.parametrize(
+        "method,path",
+        [
+            ("get", "/api/stats/"),
+            ("get", "/api/sessions/"),
+            ("get", "/api/timer/"),
+            ("get", "/api/me/"),
+            ("post", "/api/timer/start/"),
+            ("put", "/api/goal/"),
+        ],
+    )
+    def test_anonymous_requests_are_rejected(self, method, path):
+        anonymous = APIClient()
+        response = getattr(anonymous, method)(path, {}, format="json")
+        assert response.status_code in (401, 403)
+
+    def test_me_returns_current_username(self, client, user):
+        assert client.get("/api/me/").json() == {"username": user.username}
 
 
 class TestTimerFlow:
@@ -110,16 +126,18 @@ class TestStats:
         client.post(
             "/api/sessions/", {"date": str(today), "minutes": 300, "note": ""}, format="json"
         )
-        r = client.get("/api/stats/?days=7&weeks=4")
+        r = client.get("/api/stats/?weeks=4")
         assert r.status_code == 200
         body = r.json()
         assert body["week_minutes"] == 300
         assert body["week_met"] is True
         assert body["streak_weeks"] == 1
         assert body["total_minutes"] == 300
-        assert len(body["daily"]) == 7
         assert len(body["weekly"]) == 4
         assert body["weekly"][-1]["met"] is True
+        # Cumulative series covers Monday through today only.
+        assert len(body["week_cumulative"]) == today.isoweekday()
+        assert body["week_cumulative"][-1]["cumulative_minutes"] == 300
 
     def test_unknown_metric_is_400(self, client):
         assert client.get("/api/stats/?metric=nope").status_code == 400

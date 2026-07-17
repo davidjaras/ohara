@@ -1,0 +1,20 @@
+{% extends "auth_base.html" %}
+{% load i18n %}
+{% block title %}{% translate "Sign in" %} · ohara{% endblock %}
+{% block content %}
+<h1>{% translate "Sign in" %}</h1>
+<p class="muted">{% translate "Track your study time." %}</p>
+{{ form.non_field_errors }}
+<form method="post">
+  {% csrf_token %}
+  <label for="id_username">{% translate "Username" %}</label>
+  {{ form.username }}
+  {{ form.username.errors }}
+  <label for="id_password">{% translate "Password" %}</label>
+  {{ form.password }}
+  {{ form.password.errors }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit">{% translate "Sign in" %}</button>
+</form>
+<p class="muted links"><a href="{% url 'password_reset' %}">{% translate "Forgot your password?" %}</a></p>
+{% endblock %}

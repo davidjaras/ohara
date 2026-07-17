@@ -1,8 +1,8 @@
 """Business logic: timer, aggregations, goals and streak.
 
-Every function takes an explicit `now` (aware datetime) or `today` (local
-date) so the logic is deterministic and testable without mocks. Views pass
-timezone.now() / timezone.localdate().
+Every function is scoped to a `user` and takes an explicit `now` (aware
+datetime) or `today` (local date) so the logic is deterministic and testable
+without mocks. Views pass request.user and timezone.now() / localdate().
 """
 
 from dataclasses import dataclass
@@ -11,8 +11,9 @@ from datetime import date, datetime, timedelta
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
-from .metrics import Metric, get_session_metric
+from .metrics import Metric, get_measurement_metric, get_session_metric
 from .models import ActiveTimer, Measurement, Session, WeeklyGoal
 
 
@@ -34,46 +35,47 @@ def local_date(dt: datetime) -> date:
 
 # --- Timer -------------------------------------------------------------------
 
-def start_timer(metric_key: str, now: datetime) -> ActiveTimer:
+def start_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
     get_session_metric(metric_key)
-    if ActiveTimer.objects.filter(metric=metric_key).exists():
-        raise TimerError("Ya hay una sesión en curso para esta métrica.")
+    if ActiveTimer.objects.filter(user=user, metric=metric_key).exists():
+        raise TimerError(_("There is already a session in progress for this metric."))
     return ActiveTimer.objects.create(
-        metric=metric_key, started_at=now, running_since=now
+        user=user, metric=metric_key, started_at=now, running_since=now
     )
 
 
-def _get_timer(metric_key: str) -> ActiveTimer:
+def _get_timer(user, metric_key: str) -> ActiveTimer:
     try:
-        return ActiveTimer.objects.get(metric=metric_key)
+        return ActiveTimer.objects.get(user=user, metric=metric_key)
     except ActiveTimer.DoesNotExist:
-        raise TimerError("No hay ninguna sesión en curso.")
+        raise TimerError(_("There is no session in progress."))
 
 
-def pause_timer(metric_key: str, now: datetime) -> ActiveTimer:
-    timer = _get_timer(metric_key)
+def pause_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
+    timer = _get_timer(user, metric_key)
     if timer.is_paused:
-        raise TimerError("La sesión ya está en pausa.")
+        raise TimerError(_("The session is already paused."))
     timer.accumulated_seconds = timer.elapsed_seconds(now)
     timer.running_since = None
     timer.save(update_fields=["accumulated_seconds", "running_since"])
     return timer
 
 
-def resume_timer(metric_key: str, now: datetime) -> ActiveTimer:
-    timer = _get_timer(metric_key)
+def resume_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
+    timer = _get_timer(user, metric_key)
     if not timer.is_paused:
-        raise TimerError("La sesión no está en pausa.")
+        raise TimerError(_("The session is not paused."))
     timer.running_since = now
     timer.save(update_fields=["running_since"])
     return timer
 
 
 @transaction.atomic
-def finish_timer(metric_key: str, now: datetime, note: str = "") -> Session:
+def finish_timer(user, metric_key: str, now: datetime, note: str = "") -> Session:
     """Close the timer and create the Session, attributed to the start day."""
-    timer = _get_timer(metric_key)
+    timer = _get_timer(user, metric_key)
     session = Session.objects.create(
+        user=user,
         metric=metric_key,
         date=local_date(timer.started_at),
         duration_seconds=timer.elapsed_seconds(now),
@@ -85,27 +87,27 @@ def finish_timer(metric_key: str, now: datetime, note: str = "") -> Session:
     return session
 
 
-def discard_timer(metric_key: str) -> None:
-    _get_timer(metric_key).delete()
+def discard_timer(user, metric_key: str) -> None:
+    _get_timer(user, metric_key).delete()
 
 
 # --- Manual entry ------------------------------------------------------------
 
-def log_manual_session(metric_key: str, day: date, minutes: int, note: str = "") -> Session:
+def log_manual_session(user, metric_key: str, day: date, minutes: int, note: str = "") -> Session:
     get_session_metric(metric_key)
     if minutes <= 0:
-        raise ValueError("Los minutos deben ser mayores a cero.")
+        raise ValueError(_("Minutes must be greater than zero."))
     return Session.objects.create(
-        metric=metric_key, date=day, duration_seconds=minutes * 60, note=note
+        user=user, metric=metric_key, date=day, duration_seconds=minutes * 60, note=note
     )
 
 
 # --- Goals -------------------------------------------------------------------
 
-def goal_for_week(metric: Metric, week: date) -> int:
+def goal_for_week(user, metric: Metric, week: date) -> int:
     """Goal (minutes) in effect for the week starting at `week`."""
     row = (
-        WeeklyGoal.objects.filter(metric=metric.key, week_start__lte=week)
+        WeeklyGoal.objects.filter(user=user, metric=metric.key, week_start__lte=week)
         .order_by("-week_start")
         .first()
     )
@@ -114,26 +116,31 @@ def goal_for_week(metric: Metric, week: date) -> int:
     return metric.default_weekly_goal_minutes or 0
 
 
-def set_goal(metric_key: str, minutes: int, today: date) -> WeeklyGoal:
+def set_goal(user, metric_key: str, minutes: int, today: date) -> WeeklyGoal:
     """Set the goal from the current week onward (past weeks are untouched)."""
     get_session_metric(metric_key)
     if minutes <= 0:
-        raise ValueError("La meta debe ser mayor a cero.")
-    row, _ = WeeklyGoal.objects.update_or_create(
-        metric=metric_key, week_start=week_start(today), defaults={"minutes": minutes}
+        raise ValueError(_("The goal must be greater than zero."))
+    row, _created = WeeklyGoal.objects.update_or_create(
+        user=user,
+        metric=metric_key,
+        week_start=week_start(today),
+        defaults={"minutes": minutes},
     )
     # A goal row later than the current week would shadow the new value. The
     # normal flow never writes future rows, but clean them up for hygiene.
-    WeeklyGoal.objects.filter(metric=metric_key, week_start__gt=row.week_start).delete()
+    WeeklyGoal.objects.filter(
+        user=user, metric=metric_key, week_start__gt=row.week_start
+    ).delete()
     return row
 
 
 # --- Aggregations ------------------------------------------------------------
 
-def daily_minutes(metric_key: str, start: date, end: date) -> list[dict]:
+def daily_minutes(user, metric_key: str, start: date, end: date) -> list[dict]:
     """Minutes per day within [start, end], including zero days."""
     totals = dict(
-        Session.objects.filter(metric=metric_key, date__gte=start, date__lte=end)
+        Session.objects.filter(user=user, metric=metric_key, date__gte=start, date__lte=end)
         .values_list("date")
         .annotate(total=Sum("duration_seconds"))
         .values_list("date", "total")
@@ -146,6 +153,24 @@ def daily_minutes(metric_key: str, start: date, end: date) -> list[dict]:
     return days
 
 
+def week_cumulative(user, metric_key: str, today: date) -> list[dict]:
+    """Cumulative minutes for the current ISO week, Monday through `today`.
+
+    Days without sessions keep the previous value (flat line). Future days
+    are not included: the series deliberately stops at `today`.
+    """
+    get_session_metric(metric_key)
+    days = daily_minutes(user, metric_key, week_start(today), today)
+    cumulative = 0
+    out = []
+    for day in days:
+        cumulative += day["minutes"]
+        out.append(
+            {"date": day["date"], "minutes": day["minutes"], "cumulative_minutes": cumulative}
+        )
+    return out
+
+
 @dataclass
 class WeekSummary:
     week_start: date
@@ -154,11 +179,11 @@ class WeekSummary:
     met: bool
 
 
-def _week_seconds(metric_key: str) -> dict[date, int]:
+def _week_seconds(user, metric_key: str) -> dict[date, int]:
     """Total seconds per week (only weeks that have data)."""
     totals: dict[date, int] = {}
     rows = (
-        Session.objects.filter(metric=metric_key)
+        Session.objects.filter(user=user, metric=metric_key)
         .values_list("date")
         .annotate(total=Sum("duration_seconds"))
         .values_list("date", "total")
@@ -169,9 +194,9 @@ def _week_seconds(metric_key: str) -> dict[date, int]:
     return totals
 
 
-def week_summary(metric: Metric, week: date, week_seconds: dict[date, int]) -> WeekSummary:
+def week_summary(user, metric: Metric, week: date, week_seconds: dict[date, int]) -> WeekSummary:
     seconds = week_seconds.get(week, 0)
-    goal = goal_for_week(metric, week)
+    goal = goal_for_week(user, metric, week)
     return WeekSummary(
         week_start=week,
         minutes=seconds // 60,
@@ -180,18 +205,18 @@ def week_summary(metric: Metric, week: date, week_seconds: dict[date, int]) -> W
     )
 
 
-def weekly_summaries(metric_key: str, today: date, weeks: int) -> list[WeekSummary]:
+def weekly_summaries(user, metric_key: str, today: date, weeks: int) -> list[WeekSummary]:
     """Summaries for the last `weeks` weeks, current included, ascending."""
     metric = get_session_metric(metric_key)
-    totals = _week_seconds(metric_key)
+    totals = _week_seconds(user, metric_key)
     current = week_start(today)
     return [
-        week_summary(metric, current - timedelta(weeks=i), totals)
+        week_summary(user, metric, current - timedelta(weeks=i), totals)
         for i in range(weeks - 1, -1, -1)
     ]
 
 
-def current_streak(metric_key: str, today: date) -> int:
+def current_streak(user, metric_key: str, today: date) -> int:
     """Consecutive weeks that met their goal.
 
     The current week counts only once its goal is met; while unfinished it
@@ -199,24 +224,26 @@ def current_streak(metric_key: str, today: date) -> int:
     week that missed its goal.
     """
     metric = get_session_metric(metric_key)
-    totals = _week_seconds(metric_key)
+    totals = _week_seconds(user, metric_key)
     current = week_start(today)
 
     streak = 0
-    if week_summary(metric, current, totals).met:
+    if week_summary(user, metric, current, totals).met:
         streak += 1
     week = current - timedelta(weeks=1)
     # Weeks before the first recorded data never meet the goal, so the walk
     # terminates naturally; no extra bound needed.
-    while week_summary(metric, week, totals).met:
+    while week_summary(user, metric, week, totals).met:
         streak += 1
         week -= timedelta(weeks=1)
     return streak
 
 
-def total_minutes(metric_key: str) -> int:
+def total_minutes(user, metric_key: str) -> int:
     seconds = (
-        Session.objects.filter(metric=metric_key).aggregate(total=Sum("duration_seconds"))["total"]
+        Session.objects.filter(user=user, metric=metric_key).aggregate(
+            total=Sum("duration_seconds")
+        )["total"]
         or 0
     )
     return seconds // 60
@@ -224,8 +251,8 @@ def total_minutes(metric_key: str) -> int:
 
 # --- Measurements ------------------------------------------------------------
 
-def log_measurement(metric_key: str, day: date, value, note: str = "") -> Measurement:
-    from .metrics import get_measurement_metric
-
+def log_measurement(user, metric_key: str, day: date, value, note: str = "") -> Measurement:
     get_measurement_metric(metric_key)
-    return Measurement.objects.create(metric=metric_key, date=day, value=value, note=note)
+    return Measurement.objects.create(
+        user=user, metric=metric_key, date=day, value=value, note=note
+    )

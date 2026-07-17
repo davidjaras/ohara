@@ -1,0 +1,181 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-17 17:19-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+#: templates/registration/login.html:3 templates/registration/login.html:5
+#: templates/registration/login.html:17
+#: templates/registration/password_reset_complete.html:7
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: templates/registration/login.html:6
+msgid "Track your study time."
+msgstr "Trackeá tu tiempo de estudio."
+
+#: templates/registration/login.html:10
+msgid "Username"
+msgstr "Usuario"
+
+#: templates/registration/login.html:13
+msgid "Password"
+msgstr "Contraseña"
+
+#: templates/registration/login.html:19
+msgid "Forgot your password?"
+msgstr "¿Olvidaste tu contraseña?"
+
+#: templates/registration/password_change_done.html:3
+#: templates/registration/password_change_done.html:5
+msgid "Password changed"
+msgstr "Contraseña cambiada"
+
+#: templates/registration/password_change_done.html:6
+msgid "Your password was updated."
+msgstr "Tu contraseña quedó actualizada."
+
+#: templates/registration/password_change_done.html:7
+#: templates/registration/password_change_form.html:12
+msgid "Back to the app"
+msgstr "Volver a la app"
+
+#: templates/registration/password_change_form.html:3
+#: templates/registration/password_change_form.html:5
+#: templates/registration/password_change_form.html:10
+msgid "Change password"
+msgstr "Cambiar contraseña"
+
+#: templates/registration/password_change_form.html:6
+msgid "Enter your current password and the new one twice."
+msgstr "Ingresá tu contraseña actual y la nueva dos veces."
+
+#: templates/registration/password_reset_complete.html:3
+#: templates/registration/password_reset_complete.html:5
+msgid "Password reset"
+msgstr "Contraseña restablecida"
+
+#: templates/registration/password_reset_complete.html:6
+msgid "Your new password is set. You can sign in now."
+msgstr "Tu contraseña nueva quedó definida. Ya podés iniciar sesión."
+
+#: templates/registration/password_reset_confirm.html:3
+#: templates/registration/password_reset_confirm.html:6
+msgid "New password"
+msgstr "Contraseña nueva"
+
+#: templates/registration/password_reset_confirm.html:7
+msgid "Enter your new password twice."
+msgstr "Ingresá tu contraseña nueva dos veces."
+
+#: templates/registration/password_reset_confirm.html:11
+msgid "Set password"
+msgstr "Definir contraseña"
+
+#: templates/registration/password_reset_confirm.html:14
+msgid "Invalid link"
+msgstr "Enlace inválido"
+
+#: templates/registration/password_reset_confirm.html:15
+msgid "This reset link is invalid or was already used. Request a new one."
+msgstr "Este enlace es inválido o ya se usó. Pedí uno nuevo."
+
+#: templates/registration/password_reset_confirm.html:16
+msgid "Request new link"
+msgstr "Pedir enlace nuevo"
+
+#: templates/registration/password_reset_done.html:3
+#: templates/registration/password_reset_done.html:5
+msgid "Email sent"
+msgstr "Email enviado"
+
+#: templates/registration/password_reset_done.html:6
+msgid ""
+"If that email exists in the system, you will receive a link to reset your "
+"password. In development the email is printed to the server console."
+msgstr "Si ese email existe en el sistema, vas a recibir un enlace para restablecer tu contraseña. En desarrollo el email se imprime en la consola del servidor."
+
+#: templates/registration/password_reset_done.html:7
+#: templates/registration/password_reset_form.html:12
+msgid "Back to sign in"
+msgstr "Volver a iniciar sesión"
+
+#: templates/registration/password_reset_form.html:3
+#: templates/registration/password_reset_form.html:5
+msgid "Reset password"
+msgstr "Restablecer contraseña"
+
+#: templates/registration/password_reset_form.html:6
+msgid "Enter your email and we will send you a link to set a new password."
+msgstr "Ingresá tu email y te enviamos un enlace para definir una contraseña nueva."
+
+#: templates/registration/password_reset_form.html:10
+msgid "Send link"
+msgstr "Enviar enlace"
+
+#: tracker/metrics.py:37
+#, python-format
+msgid "Unknown metric: %s"
+msgstr "Métrica desconocida: %s"
+
+#: tracker/metrics.py:44
+#, python-format
+msgid "Metric %s is not a session metric"
+msgstr "La métrica %s no es de tipo sesión"
+
+#: tracker/metrics.py:51
+#, python-format
+msgid "Metric %s is not a measurement metric"
+msgstr "La métrica %s no es de tipo medición"
+
+#: tracker/services.py:41
+msgid "There is already a session in progress for this metric."
+msgstr "Ya hay una sesión en curso para esta métrica."
+
+#: tracker/services.py:51
+msgid "There is no session in progress."
+msgstr "No hay ninguna sesión en curso."
+
+#: tracker/services.py:57
+msgid "The session is already paused."
+msgstr "La sesión ya está en pausa."
+
+#: tracker/services.py:67
+msgid "The session is not paused."
+msgstr "La sesión no está en pausa."
+
+#: tracker/services.py:99
+msgid "Minutes must be greater than zero."
+msgstr "Los minutos deben ser mayores a cero."
+
+#: tracker/services.py:123
+msgid "The goal must be greater than zero."
+msgstr "La meta debe ser mayor a cero."
+
+#: tracker/views.py:80
+msgid "Invalid action."
+msgstr "Acción inválida."
+
+#: tracker/views.py:131
+msgid "No such session."
+msgstr "No existe esa sesión."
+
+#: tracker/views.py:139
+msgid "Missing metric parameter."
+msgstr "Falta el parámetro metric."
+
+#: tracker/views.py:161
+msgid "No such measurement."
+msgstr "No existe esa medición."
