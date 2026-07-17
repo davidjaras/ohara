@@ -1,4 +1,4 @@
-"""Tests de la lógica de negocio: cronómetro, agregaciones, meta y racha."""
+"""Business-logic tests: timer, aggregations, goal and streak."""
 
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 
@@ -17,7 +17,7 @@ def dt(*args) -> datetime:
     return datetime(*args, tzinfo=UTC)
 
 
-# El lunes 6 de julio de 2026 ancla las semanas de los tests.
+# Monday July 6, 2026 anchors the weeks used in these tests.
 MONDAY = date(2026, 7, 6)
 
 
@@ -25,7 +25,7 @@ def log(day: date, minutes: int, metric: str = "estudio") -> Session:
     return services.log_manual_session(metric, day, minutes)
 
 
-# --- Semanas -----------------------------------------------------------------
+# --- Weeks -----------------------------------------------------------------
 
 class TestWeekStart:
     def test_monday_maps_to_itself(self):
@@ -38,7 +38,7 @@ class TestWeekStart:
         assert services.week_start(MONDAY + timedelta(days=7)) == MONDAY + timedelta(days=7)
 
 
-# --- Cronómetro --------------------------------------------------------------
+# --- Timer --------------------------------------------------------------
 
 class TestTimer:
     def test_full_flow_with_pauses_accumulates_only_running_time(self):
@@ -50,7 +50,7 @@ class TestTimer:
         services.resume_timer("estudio", t0 + timedelta(minutes=50))
         session = services.finish_timer("estudio", t0 + timedelta(minutes=60), note="repaso")
 
-        # Corrió 10 + 15 + 10 minutos; las pausas (15 + 10) no cuentan.
+        # Ran 10 + 15 + 10 minutes; the pauses (15 + 10) don't count.
         assert session.duration_seconds == 35 * 60
         assert session.note == "repaso"
         assert session.started_at == t0
@@ -100,7 +100,7 @@ class TestTimer:
             services.start_timer("inventada", dt(2026, 7, 6, 10, 0))
 
 
-# --- Registro manual ---------------------------------------------------------
+# --- Manual entry ---------------------------------------------------------
 
 class TestManualLog:
     def test_creates_session_without_timestamps(self):
@@ -113,7 +113,7 @@ class TestManualLog:
             services.log_manual_session("estudio", MONDAY, 0)
 
 
-# --- Agregación diaria -------------------------------------------------------
+# --- Daily aggregation -------------------------------------------------------
 
 class TestDailyMinutes:
     def test_sums_per_day_and_fills_zero_days(self):
@@ -125,7 +125,7 @@ class TestDailyMinutes:
         assert result[0]["date"] == MONDAY
 
     def test_seconds_are_summed_before_flooring_to_minutes(self):
-        # 90s + 90s = 3 min; floor por sesión daría 1+1 = 2.
+        # 90s + 90s = 3 min; flooring per session would give 1+1 = 2.
         for _ in range(2):
             Session.objects.create(metric="estudio", date=MONDAY, duration_seconds=90)
         result = services.daily_minutes("estudio", MONDAY, MONDAY)
@@ -138,11 +138,11 @@ class TestDailyMinutes:
         assert result[0]["minutes"] == 30
 
 
-# --- Resumen semanal y meta --------------------------------------------------
+# --- Weekly summary and goal --------------------------------------------------
 
 class TestWeeklySummaries:
     def test_week_met_when_total_reaches_goal(self):
-        # Meta default 270: 3 sesiones de 90 la cumplen exacto.
+        # Default goal 270: three 90-minute sessions meet it exactly.
         for i in range(3):
             log(MONDAY + timedelta(days=i), 90)
         [summary] = services.weekly_summaries("estudio", MONDAY, weeks=1)
@@ -157,7 +157,7 @@ class TestWeeklySummaries:
 
     def test_sessions_from_all_weekdays_count_to_same_week(self):
         log(MONDAY, 100)
-        log(MONDAY + timedelta(days=6), 200)  # domingo
+        log(MONDAY + timedelta(days=6), 200)  # Sunday
         [summary] = services.weekly_summaries("estudio", MONDAY + timedelta(days=3), weeks=1)
         assert summary.minutes == 300
 
@@ -191,14 +191,14 @@ class TestGoals:
         assert services.goal_for_week(get_metric("estudio"), MONDAY) == 200
 
     def test_past_week_evaluated_with_goal_of_that_time(self):
-        log(MONDAY, 280)  # cumple 270, no cumpliría 300
+        log(MONDAY, 280)  # meets 270, would miss 300
         services.set_goal("estudio", 300, today=MONDAY + timedelta(weeks=1))
         summaries = services.weekly_summaries("estudio", MONDAY + timedelta(weeks=1), weeks=2)
         assert summaries[0].met is True
         assert summaries[1].goal_minutes == 300
 
 
-# --- Racha -------------------------------------------------------------------
+# --- Streak -------------------------------------------------------------------
 
 class TestStreak:
     def meet_week(self, week: date):
@@ -215,28 +215,28 @@ class TestStreak:
     def test_current_week_extends_streak_once_met(self):
         self.meet_week(MONDAY - timedelta(weeks=1))
         assert services.current_streak("estudio", MONDAY) == 1
-        self.meet_week(MONDAY)  # cumple la semana en curso
+        self.meet_week(MONDAY)  # current week now met
         assert services.current_streak("estudio", MONDAY) == 2
 
     def test_unmet_current_week_does_not_break_streak(self):
         self.meet_week(MONDAY - timedelta(weeks=1))
-        log(MONDAY, 10)  # semana actual empezada pero sin cumplir
+        log(MONDAY, 10)  # current week started but unmet
         assert services.current_streak("estudio", MONDAY) == 1
 
     def test_gap_week_breaks_streak(self):
         self.meet_week(MONDAY - timedelta(weeks=3))
-        self.meet_week(MONDAY - timedelta(weeks=1))  # hueco en la semana -2
+        self.meet_week(MONDAY - timedelta(weeks=1))  # gap at week -2
         assert services.current_streak("estudio", MONDAY) == 1
 
     def test_partial_week_breaks_streak(self):
         self.meet_week(MONDAY - timedelta(weeks=3))
-        log(MONDAY - timedelta(weeks=2), 100)  # semana con datos pero sin meta
+        log(MONDAY - timedelta(weeks=2), 100)  # week with data but goal missed
         self.meet_week(MONDAY - timedelta(weeks=1))
         assert services.current_streak("estudio", MONDAY) == 1
 
     def test_streak_respects_goal_history(self):
-        # Semana -2 con 280 min y meta 270 (cumple); luego la meta sube a 300
-        # y la semana -1 con 280 ya no cumple.
+        # Week -2 has 280 min against goal 270 (met); the goal then rises to
+        # 300 and week -1 with 280 no longer meets it.
         log(MONDAY - timedelta(weeks=2), 280)
         services.set_goal("estudio", 300, today=MONDAY - timedelta(weeks=1))
         log(MONDAY - timedelta(weeks=1), 280)

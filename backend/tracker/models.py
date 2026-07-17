@@ -2,11 +2,11 @@ from django.db import models
 
 
 class Session(models.Model):
-    """Una sesión terminada de una métrica tipo "session" (ej. estudio).
+    """A finished session of a "session"-kind metric (e.g. estudio).
 
-    `date` es el día local al que se atribuye la sesión: el día en que empezó
-    (para el cronómetro) o el que se eligió en el registro manual. Las
-    entradas manuales no tienen started_at/ended_at.
+    `date` is the local day the session is attributed to: the day it started
+    (timer flow) or the day chosen in a manual entry. Manual entries have no
+    started_at/ended_at.
     """
 
     metric = models.CharField(max_length=50, default="estudio", db_index=True)
@@ -25,12 +25,11 @@ class Session(models.Model):
 
 
 class ActiveTimer(models.Model):
-    """Cronómetro en curso (a lo sumo uno por métrica).
+    """The in-progress timer (at most one per metric).
 
-    Se persiste para que un refresh del navegador o un reinicio del servidor
-    no pierdan la sesión. `running_since` es null cuando está en pausa;
-    `accumulated_seconds` acumula los tramos ya corridos antes de la última
-    pausa.
+    Persisted so a browser refresh or server restart never loses the session.
+    `running_since` is null while paused; `accumulated_seconds` holds the
+    segments already run before the last pause.
     """
 
     metric = models.CharField(max_length=50, unique=True)
@@ -49,12 +48,12 @@ class ActiveTimer(models.Model):
         return self.accumulated_seconds + running
 
     def __str__(self) -> str:
-        state = "pausado" if self.is_paused else "corriendo"
-        return f"{self.metric} ({state}) desde {self.started_at}"
+        state = "paused" if self.is_paused else "running"
+        return f"{self.metric} ({state}) since {self.started_at}"
 
 
 class Measurement(models.Model):
-    """Una medición puntual de una métrica tipo "measurement" (ej. peso)."""
+    """A point-in-time value of a "measurement"-kind metric (e.g. peso)."""
 
     metric = models.CharField(max_length=50, db_index=True)
     date = models.DateField(db_index=True)
@@ -70,10 +69,10 @@ class Measurement(models.Model):
 
 
 class WeeklyGoal(models.Model):
-    """Meta semanal en minutos, vigente desde la semana `week_start` (lunes).
+    """Weekly goal in minutes, effective from the ISO week `week_start` (Monday).
 
-    Cambiar la meta crea/actualiza la fila de la semana actual: las semanas
-    pasadas se siguen evaluando con la meta que regía entonces.
+    Changing the goal writes the current week's row: past weeks keep being
+    evaluated against the goal that was in effect back then.
     """
 
     metric = models.CharField(max_length=50, db_index=True)
@@ -86,4 +85,4 @@ class WeeklyGoal(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.metric} desde {self.week_start}: {self.minutes} min"
+        return f"{self.metric} from {self.week_start}: {self.minutes} min"

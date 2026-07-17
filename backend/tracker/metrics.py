@@ -1,14 +1,14 @@
-"""Registro de métricas en código.
+"""In-code metric registry.
 
-Extensible sin migrar datos: agregar una métrica nueva es agregar una entrada
-acá. Las filas existentes (Session/Measurement/WeeklyGoal) referencian la
-métrica por su clave de texto, así que ningún dato cambia.
+Extensible without data migrations: adding a new metric means adding an entry
+here. Existing rows (Session/Measurement/WeeklyGoal) reference the metric by
+its text key, so no stored data changes.
 
-Dos clases de métrica:
-- "session": eventos con duración (cronómetro o registro manual en minutos),
-  con meta semanal y racha.
-- "measurement": mediciones puntuales (un valor en una fecha), sin duración
-  ni meta.
+Two metric kinds:
+- "session": events with a duration (timer or manual entry in minutes), with
+  a weekly goal and a streak.
+- "measurement": point-in-time values (one value on a date), no duration and
+  no goal.
 """
 
 from dataclasses import dataclass
@@ -22,8 +22,8 @@ class Metric:
     key: str
     name: str
     kind: str
-    unit: str  # unidad para mostrar ("min", "kg", ...)
-    default_weekly_goal_minutes: int | None = None  # solo para kind=session
+    unit: str  # display unit ("min", "kg", ...)
+    default_weekly_goal_minutes: int | None = None  # only for kind=session
 
 
 METRICS: dict[str, Metric] = {
@@ -32,7 +32,7 @@ METRICS: dict[str, Metric] = {
         name="Estudio",
         kind=KIND_SESSION,
         unit="min",
-        default_weekly_goal_minutes=270,  # 3 sesiones de 90
+        default_weekly_goal_minutes=270,  # 3 sessions of 90
     ),
 }
 

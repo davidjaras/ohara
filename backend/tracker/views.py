@@ -44,7 +44,7 @@ class MetricListView(APIView):
 
 
 class TimerView(APIView):
-    """Estado y descarte del cronómetro activo."""
+    """State and discard of the active timer."""
 
     def get(self, request):
         metric = request.query_params.get("metric", "estudio")
@@ -61,7 +61,7 @@ class TimerView(APIView):
 
 
 class TimerActionView(APIView):
-    """POST /api/timer/<action>/ con action en start|pause|resume."""
+    """POST /api/timer/<action>/ with action in start|pause|resume."""
 
     actions = {
         "start": services.start_timer,
@@ -176,7 +176,7 @@ class GoalView(APIView):
 
 
 class StatsView(APIView):
-    """Payload completo del dashboard en una sola llamada."""
+    """Full dashboard payload in a single call."""
 
     def get(self, request):
         metric_key = request.query_params.get("metric", "estudio")

@@ -1,11 +1,11 @@
-"""Rutas raíz: API bajo /api/ y, en producción, la SPA compilada en /."""
+"""Root routes: API under /api/ and, in production, the built SPA at /."""
 
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
 urlpatterns = [
     path("api/", include("tracker.urls")),
-    # Catch-all para la SPA (frontend/dist/index.html). En desarrollo el
-    # frontend corre en Vite (:5173) y esta ruta no se usa.
+    # SPA catch-all (frontend/dist/index.html). In development the frontend
+    # runs on Vite (:5173) and this route is unused.
     re_path(r"^(?!api/|static/).*$", TemplateView.as_view(template_name="index.html")),
 ]

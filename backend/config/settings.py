@@ -1,7 +1,7 @@
 """Django settings for ohara.
 
-App personal de un solo usuario, local-first. Los valores sensibles o de
-entorno se toman de variables OHARA_* con defaults pensados para desarrollo.
+Single-user, local-first personal app. Sensitive/environment values come
+from OHARA_* variables with development-friendly defaults.
 """
 
 import os
@@ -33,7 +33,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-# El frontend compilado (frontend/dist) se sirve desde Django en producción.
+# The built frontend (frontend/dist) is served by Django in production.
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 
 TEMPLATES = [
@@ -56,7 +56,7 @@ DATABASES = {
 
 
 def _system_timezone() -> str:
-    """Zona horaria del sistema (symlink /etc/localtime en macOS/Linux)."""
+    """System timezone (/etc/localtime symlink on macOS/Linux)."""
     try:
         link = os.readlink("/etc/localtime")
         if "zoneinfo/" in link:
@@ -74,7 +74,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_ROOT = FRONTEND_DIST if FRONTEND_DIST.exists() else None
-# En desarrollo whitenoise sirve directo del filesystem (sin collectstatic).
+# In development whitenoise serves straight from the filesystem (no collectstatic).
 WHITENOISE_AUTOREFRESH = DEBUG
 WHITENOISE_USE_FINDERS = DEBUG
 

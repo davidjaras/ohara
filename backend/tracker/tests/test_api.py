@@ -1,4 +1,4 @@
-"""Tests del flujo de registro vía API REST."""
+"""Tests for the logging flow through the REST API."""
 
 from datetime import timedelta
 from unittest import mock
@@ -44,7 +44,7 @@ class TestTimerFlow:
             )
         assert r.status_code == 201
         body = r.json()
-        assert body["duration_seconds"] == 15 * 60  # 10 corriendo + 5 tras reanudar
+        assert body["duration_seconds"] == 15 * 60  # 10 running + 5 after resume
         assert body["note"] == "aprendí DRF"
 
         session = Session.objects.get()

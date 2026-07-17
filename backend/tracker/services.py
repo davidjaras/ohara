@@ -1,8 +1,8 @@
-"""Lógica de negocio: cronómetro, agregaciones, metas y racha.
+"""Business logic: timer, aggregations, goals and streak.
 
-Todas las funciones reciben `now` (datetime aware) o `today` (date local)
-explícitos, para que la lógica sea determinista y testeable sin mocks.
-Las vistas les pasan timezone.now() / timezone.localdate().
+Every function takes an explicit `now` (aware datetime) or `today` (local
+date) so the logic is deterministic and testable without mocks. Views pass
+timezone.now() / timezone.localdate().
 """
 
 from dataclasses import dataclass
@@ -17,22 +17,22 @@ from .models import ActiveTimer, Measurement, Session, WeeklyGoal
 
 
 class TimerError(Exception):
-    """Operación inválida sobre el cronómetro (ya existe, no existe, etc.)."""
+    """Invalid timer operation (already running, none active, etc.)."""
 
 
-# --- Semanas -----------------------------------------------------------------
+# --- Weeks -------------------------------------------------------------------
 
 def week_start(day: date) -> date:
-    """Lunes de la semana ISO a la que pertenece `day`."""
+    """Monday of the ISO week `day` belongs to."""
     return day - timedelta(days=day.weekday())
 
 
 def local_date(dt: datetime) -> date:
-    """Día local (según TIME_ZONE) de un datetime aware."""
+    """Local day (per TIME_ZONE) of an aware datetime."""
     return timezone.localtime(dt).date()
 
 
-# --- Cronómetro --------------------------------------------------------------
+# --- Timer -------------------------------------------------------------------
 
 def start_timer(metric_key: str, now: datetime) -> ActiveTimer:
     get_session_metric(metric_key)
@@ -71,7 +71,7 @@ def resume_timer(metric_key: str, now: datetime) -> ActiveTimer:
 
 @transaction.atomic
 def finish_timer(metric_key: str, now: datetime, note: str = "") -> Session:
-    """Cierra el cronómetro y crea la Session. Se atribuye al día de inicio."""
+    """Close the timer and create the Session, attributed to the start day."""
     timer = _get_timer(metric_key)
     session = Session.objects.create(
         metric=metric_key,
@@ -89,7 +89,7 @@ def discard_timer(metric_key: str) -> None:
     _get_timer(metric_key).delete()
 
 
-# --- Registro manual ---------------------------------------------------------
+# --- Manual entry ------------------------------------------------------------
 
 def log_manual_session(metric_key: str, day: date, minutes: int, note: str = "") -> Session:
     get_session_metric(metric_key)
@@ -100,10 +100,10 @@ def log_manual_session(metric_key: str, day: date, minutes: int, note: str = "")
     )
 
 
-# --- Metas -------------------------------------------------------------------
+# --- Goals -------------------------------------------------------------------
 
 def goal_for_week(metric: Metric, week: date) -> int:
-    """Meta (minutos) vigente para la semana que empieza en `week`."""
+    """Goal (minutes) in effect for the week starting at `week`."""
     row = (
         WeeklyGoal.objects.filter(metric=metric.key, week_start__lte=week)
         .order_by("-week_start")
@@ -115,24 +115,23 @@ def goal_for_week(metric: Metric, week: date) -> int:
 
 
 def set_goal(metric_key: str, minutes: int, today: date) -> WeeklyGoal:
-    """Fija la meta desde la semana actual en adelante (las pasadas no cambian)."""
+    """Set the goal from the current week onward (past weeks are untouched)."""
     get_session_metric(metric_key)
     if minutes <= 0:
         raise ValueError("La meta debe ser mayor a cero.")
     row, _ = WeeklyGoal.objects.update_or_create(
         metric=metric_key, week_start=week_start(today), defaults={"minutes": minutes}
     )
-    # Una meta futura ya registrada quedaría por delante de la nueva; no aplica
-    # en el flujo normal (solo escribimos la semana actual), pero por higiene
-    # eliminamos filas posteriores a hoy.
+    # A goal row later than the current week would shadow the new value. The
+    # normal flow never writes future rows, but clean them up for hygiene.
     WeeklyGoal.objects.filter(metric=metric_key, week_start__gt=row.week_start).delete()
     return row
 
 
-# --- Agregaciones ------------------------------------------------------------
+# --- Aggregations ------------------------------------------------------------
 
 def daily_minutes(metric_key: str, start: date, end: date) -> list[dict]:
-    """Minutos por día en [start, end], incluyendo días en cero."""
+    """Minutes per day within [start, end], including zero days."""
     totals = dict(
         Session.objects.filter(metric=metric_key, date__gte=start, date__lte=end)
         .values_list("date")
@@ -156,7 +155,7 @@ class WeekSummary:
 
 
 def _week_seconds(metric_key: str) -> dict[date, int]:
-    """Total de segundos por semana (solo semanas con datos)."""
+    """Total seconds per week (only weeks that have data)."""
     totals: dict[date, int] = {}
     rows = (
         Session.objects.filter(metric=metric_key)
@@ -182,7 +181,7 @@ def week_summary(metric: Metric, week: date, week_seconds: dict[date, int]) -> W
 
 
 def weekly_summaries(metric_key: str, today: date, weeks: int) -> list[WeekSummary]:
-    """Resumen de las últimas `weeks` semanas, la actual incluida, ascendente."""
+    """Summaries for the last `weeks` weeks, current included, ascending."""
     metric = get_session_metric(metric_key)
     totals = _week_seconds(metric_key)
     current = week_start(today)
@@ -193,11 +192,11 @@ def weekly_summaries(metric_key: str, today: date, weeks: int) -> list[WeekSumma
 
 
 def current_streak(metric_key: str, today: date) -> int:
-    """Semanas cumplidas consecutivas.
+    """Consecutive weeks that met their goal.
 
-    La semana en curso suma solo si ya cumplió la meta; mientras no termine,
-    no rompe la racha. Hacia atrás, la racha corta en la primera semana
-    incumplida.
+    The current week counts only once its goal is met; while unfinished it
+    does not break the streak. Going backwards, the streak stops at the first
+    week that missed its goal.
     """
     metric = get_session_metric(metric_key)
     totals = _week_seconds(metric_key)
@@ -207,8 +206,8 @@ def current_streak(metric_key: str, today: date) -> int:
     if week_summary(metric, current, totals).met:
         streak += 1
     week = current - timedelta(weeks=1)
-    # Las semanas anteriores al primer dato nunca cumplen, así que el corte
-    # llega naturalmente; no hace falta un límite extra.
+    # Weeks before the first recorded data never meet the goal, so the walk
+    # terminates naturally; no extra bound needed.
     while week_summary(metric, week, totals).met:
         streak += 1
         week -= timedelta(weeks=1)
@@ -223,7 +222,7 @@ def total_minutes(metric_key: str) -> int:
     return seconds // 60
 
 
-# --- Mediciones --------------------------------------------------------------
+# --- Measurements ------------------------------------------------------------
 
 def log_measurement(metric_key: str, day: date, value, note: str = "") -> Measurement:
     from .metrics import get_measurement_metric
