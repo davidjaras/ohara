@@ -6,6 +6,14 @@ unidades sobre un viewBox de 64. `currentColor` es canónico para controlar las
 variantes desde CSS sin duplicar geometría. Los rasterizados se aplazaron
 deliberadamente.
 
+Corrección de color contra la imagen de referencia: la geometría del canon ya
+calcaba el ejemplo (stroke/diámetro 0.150 vs 0.149; apertura en la misma
+zona), pero el `#22C55E` del draft es más saturado que el verde del ejemplo
+(mismo hue ~142°, más suave). El emerald del brand pasó a `#4FC580` (aplanado
+del degradado de referencia) para exports/favicon; dentro de la app el símbolo
+usa `currentColor` y toma el acento de la UI (header y páginas de auth), así
+nunca desentona con los botones.
+
 ## Auth: sistema nativo de Django, páginas server-rendered
 Login/logout/cambio/reset de password usan `django.contrib.auth.urls` con
 templates propios (CSS inline a juego con el tema). La SPA usa la sesión de

@@ -5,6 +5,7 @@ import { History, LayoutDashboard, LogOut, Scale, Settings } from 'lucide-react'
 import { api, logout } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { OharaLogo } from '@/components/brand/OharaLogo'
 
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
@@ -81,7 +82,7 @@ export function Layout() {
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <NavLink to="/" className="flex items-center gap-2 text-lg font-semibold">
-            <span className="size-2.5 rounded-full bg-primary" />
+            <OharaLogo size={22} className="text-primary" />
             ohara
           </NavLink>
           <div className="flex items-center gap-2">

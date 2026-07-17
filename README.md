@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/brand/ohara-symbol-emerald.svg" alt="Ohara" width="72">
+</p>
+
 # ohara
 
 App personal para trackear tiempo de estudio, inspirada en el modelo de metas
@@ -88,6 +92,7 @@ frontend/
     components/      # layout, timer, charts, ui/ (shadcn)
     pages/           # dashboard, historial, peso, ajustes
 dev.sh               # levanta ambos servidores locales
+docs/brand.md        # marca: símbolo, colores, usos (preview en /brand-preview)
 NOTES.md             # decisiones de diseño
 ```
 

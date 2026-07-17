@@ -17,12 +17,18 @@ units of optical padding on every side.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Ohara emerald | `#22C55E` | Primary symbol color |
+| Ohara emerald | `#4FC580` | Primary symbol color (standalone exports, favicon) |
 | Dark background | `#0B0F0D` | Canonical dark surface |
 | Light foreground | `#F5F5F5` | White mark on dark surfaces |
 
+Ohara emerald is the flat equivalent of the reference image's soft-gradient
+green: same hue, mid perceived lightness. (An earlier draft used `#22C55E`,
+which reads noticeably more saturated than the reference.)
+
 Approved variants are emerald or white on the dark background, and emerald or
-near-black (`#0B0F0D`) on a light background. Maintain sufficient contrast in
+near-black (`#0B0F0D`) on a light background. **In-product**, the symbol is
+rendered with `currentColor` taking the app's accent token (`--primary`), so
+the mark always matches the surrounding UI. Maintain sufficient contrast in
 every use. The canonical SVG and React component use `currentColor`; set the
 CSS `color` property to select an approved color without changing the geometry.
 
@@ -46,6 +52,10 @@ favicon at browser-icon sizes and do not reduce the stroke weight.
 - Do not place a checkmark, letter, or illustrative object inside the symbol.
 - Do not use unapproved colors or place the mark on a low-contrast background.
 
+The visual reference for the mark is `docs/brand-reference.png` (soft
+gradient, app-tile framing); the canonical assets are its flat, geometric
+formalization.
+
 ## Files
 
 - `frontend/public/brand/ohara-symbol.svg`: canonical `currentColor` symbol.
@@ -53,7 +63,7 @@ favicon at browser-icon sizes and do not reduce the stroke weight.
 - `frontend/public/brand/ohara-symbol-white.svg`: light standalone export.
 - `frontend/public/favicon.svg`: small-size emerald browser icon on the flat
   dark application tile.
-- `frontend/src/components/brand/geometry.ts`: shared canonical geometry values.
+- `frontend/src/components/brand/geometry.ts`: shared canonical geometry and color values.
 - `frontend/src/components/brand/OharaLogo.tsx`: reusable React component.
 - `frontend/src/pages/BrandPreview.tsx`: internal geometry, scale, and color
   review page.
