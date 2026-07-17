@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from .models import Measurement, Session
@@ -25,7 +26,7 @@ class SessionSerializer(serializers.ModelSerializer):
 
 
 class ManualSessionInputSerializer(serializers.Serializer):
-    metric = serializers.CharField(default="estudio")
+    metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
     date = serializers.DateField()
     minutes = serializers.IntegerField(min_value=1)
     note = serializers.CharField(allow_blank=True, default="", trim_whitespace=False)
@@ -45,14 +46,14 @@ class MeasurementInputSerializer(serializers.Serializer):
 
 
 class GoalInputSerializer(serializers.Serializer):
-    metric = serializers.CharField(default="estudio")
+    metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
     minutes = serializers.IntegerField(min_value=1)
 
 
 class FinishTimerSerializer(serializers.Serializer):
-    metric = serializers.CharField(default="estudio")
+    metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
     note = serializers.CharField(allow_blank=True, default="", trim_whitespace=False)
 
 
 class TimerActionSerializer(serializers.Serializer):
-    metric = serializers.CharField(default="estudio")
+    metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)

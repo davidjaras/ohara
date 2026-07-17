@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 
 class Session(models.Model):
@@ -9,7 +10,9 @@ class Session(models.Model):
     started_at/ended_at.
     """
 
-    metric = models.CharField(max_length=50, default="estudio", db_index=True)
+    metric = models.CharField(
+        max_length=50, default=settings.DEFAULT_SESSION_METRIC, db_index=True
+    )
     date = models.DateField(db_index=True)
     duration_seconds = models.PositiveIntegerField()
     note = models.TextField(blank=True)

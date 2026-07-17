@@ -1,8 +1,8 @@
-"""In-code metric registry.
+"""Metric access helpers.
 
-Extensible without data migrations: adding a new metric means adding an entry
-here. Existing rows (Session/Measurement/WeeklyGoal) reference the metric by
-its text key, so no stored data changes.
+The metric registry lives in Django settings. Existing rows
+(Session/Measurement/WeeklyGoal) reference the metric by its text key, so
+configuration changes do not require data migrations.
 
 Two metric kinds:
 - "session": events with a duration (timer or manual entry in minutes), with
@@ -13,8 +13,7 @@ Two metric kinds:
 
 from dataclasses import dataclass
 
-KIND_SESSION = "session"
-KIND_MEASUREMENT = "measurement"
+from django.conf import settings
 
 
 @dataclass(frozen=True)
@@ -26,39 +25,27 @@ class Metric:
     default_weekly_goal_minutes: int | None = None  # only for kind=session
 
 
-METRICS: dict[str, Metric] = {
-    "estudio": Metric(
-        key="estudio",
-        name="Estudio",
-        kind=KIND_SESSION,
-        unit="min",
-        default_weekly_goal_minutes=270,  # 3 sessions of 90
-    ),
-    "peso": Metric(
-        key="peso",
-        name="Peso",
-        kind=KIND_MEASUREMENT,
-        unit="kg",
-    ),
-}
+def list_metrics() -> list[Metric]:
+    return [Metric(**data) for data in settings.METRICS.values()]
 
 
 def get_metric(key: str) -> Metric:
     try:
-        return METRICS[key]
+        data = settings.METRICS[key]
     except KeyError:
         raise ValueError(f"Métrica desconocida: {key!r}")
+    return Metric(**data)
 
 
 def get_session_metric(key: str) -> Metric:
     metric = get_metric(key)
-    if metric.kind != KIND_SESSION:
+    if metric.kind != settings.KIND_SESSION:
         raise ValueError(f"La métrica {key!r} no es de tipo sesión")
     return metric
 
 
 def get_measurement_metric(key: str) -> Metric:
     metric = get_metric(key)
-    if metric.kind != KIND_MEASUREMENT:
+    if metric.kind != settings.KIND_MEASUREMENT:
         raise ValueError(f"La métrica {key!r} no es de tipo medición")
     return metric

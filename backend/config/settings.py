@@ -85,3 +85,29 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "UNAUTHENTICATED_USER": None,
 }
+
+# Domain configuration.
+KIND_SESSION = "session"
+KIND_MEASUREMENT = "measurement"
+
+DEFAULT_SESSION_METRIC = "estudio"
+DEFAULT_SESSION_LIMIT = 50
+DEFAULT_MEASUREMENT_LIMIT = 100
+DEFAULT_STATS_DAYS = 14
+DEFAULT_STATS_WEEKS = 12
+
+METRICS = {
+    "estudio": {
+        "key": "estudio",
+        "name": "Estudio",
+        "kind": KIND_SESSION,
+        "unit": "min",
+        "default_weekly_goal_minutes": 270,
+    },
+    "peso": {
+        "key": "peso",
+        "name": "Peso",
+        "kind": KIND_MEASUREMENT,
+        "unit": "kg",
+    },
+}

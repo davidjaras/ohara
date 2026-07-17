@@ -1,13 +1,14 @@
 from dataclasses import asdict
 from datetime import timedelta
 
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
-from .metrics import METRICS, get_metric
+from .metrics import get_metric, list_metrics
 from .models import ActiveTimer, Measurement, Session
 from .serializers import (
     FinishTimerSerializer,
@@ -40,19 +41,19 @@ def _timer_state(timer: ActiveTimer | None) -> dict:
 
 class MetricListView(APIView):
     def get(self, request):
-        return Response([asdict(m) for m in METRICS.values()])
+        return Response([asdict(m) for m in list_metrics()])
 
 
 class TimerView(APIView):
     """State and discard of the active timer."""
 
     def get(self, request):
-        metric = request.query_params.get("metric", "estudio")
+        metric = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
         timer = ActiveTimer.objects.filter(metric=metric).first()
         return Response(_timer_state(timer))
 
     def delete(self, request):
-        metric = request.query_params.get("metric", "estudio")
+        metric = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
         try:
             services.discard_timer(metric)
         except services.TimerError as e:
@@ -98,8 +99,8 @@ class TimerFinishView(APIView):
 
 class SessionListView(APIView):
     def get(self, request):
-        metric = request.query_params.get("metric", "estudio")
-        limit = int(request.query_params.get("limit", 50))
+        metric = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
+        limit = int(request.query_params.get("limit", settings.DEFAULT_SESSION_LIMIT))
         sessions = Session.objects.filter(metric=metric)[:limit]
         return Response(SessionSerializer(sessions, many=True).data)
 
@@ -129,7 +130,7 @@ class MeasurementListView(APIView):
         metric = request.query_params.get("metric")
         if not metric:
             return _error("Falta el parámetro metric.", status.HTTP_400_BAD_REQUEST)
-        limit = int(request.query_params.get("limit", 100))
+        limit = int(request.query_params.get("limit", settings.DEFAULT_MEASUREMENT_LIMIT))
         rows = Measurement.objects.filter(metric=metric)[:limit]
         return Response(MeasurementSerializer(rows, many=True).data)
 
@@ -156,7 +157,7 @@ class MeasurementDetailView(APIView):
 
 class GoalView(APIView):
     def get(self, request):
-        metric_key = request.query_params.get("metric", "estudio")
+        metric_key = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
         try:
             metric = get_metric(metric_key)
         except ValueError as e:
@@ -179,9 +180,9 @@ class StatsView(APIView):
     """Full dashboard payload in a single call."""
 
     def get(self, request):
-        metric_key = request.query_params.get("metric", "estudio")
-        days = int(request.query_params.get("days", 14))
-        weeks = int(request.query_params.get("weeks", 12))
+        metric_key = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
+        days = int(request.query_params.get("days", settings.DEFAULT_STATS_DAYS))
+        weeks = int(request.query_params.get("weeks", settings.DEFAULT_STATS_WEEKS))
         today = timezone.localdate()
         try:
             weekly = services.weekly_summaries(metric_key, today, weeks)
