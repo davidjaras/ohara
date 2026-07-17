@@ -4,21 +4,62 @@ App personal para trackear tiempo de estudio, inspirada en el modelo de metas
 semanales de Garmin: meta semanal en minutos, gráficas por día y por semana,
 chulito verde en las semanas cumplidas y racha de semanas consecutivas.
 
-- **Backend:** Django 6 + Django REST Framework + SQLite (API-first, un solo usuario).
-- **Frontend:** React 19 + Vite + Tailwind v4 + shadcn/ui (tema oscuro, acento esmeralda).
+- **Backend:** Django 6 + Django REST Framework + SQLite (API-first, multiusuario
+  con el auth nativo de Django).
+- **Frontend:** React 19 + Vite + Tailwind v4 + shadcn/ui (tema oscuro, acento
+  esmeralda), interfaz en español e inglés (react-i18next).
 
 ## Desarrollo
 
-Requisitos: [uv](https://docs.astral.sh/uv/) y Node 20+.
+Requisitos: [uv](https://docs.astral.sh/uv/), Node 20+ y gettext
+(`brew install gettext`) para compilar las traducciones del backend.
 
 ```bash
 ./dev.sh
 ```
 
-Eso sincroniza dependencias, migra la base y levanta los dos servidores:
+Eso sincroniza dependencias, migra la base, compila traducciones y levanta los
+dos servidores:
 
-- Frontend: http://localhost:5173/ (Vite, con proxy de `/api` al backend)
+- Frontend: http://localhost:5173/ (Vite, con proxy de `/api`, `/accounts` y
+  `/admin` al backend)
 - API: http://127.0.0.1:8000/api/
+
+La app requiere login (`/accounts/login/`). El primer usuario sale de la
+sección siguiente.
+
+### Superusuario, admin y consola de Django
+
+Todos los comandos se corren desde `backend/`.
+
+```bash
+cd backend
+
+# Crear un superusuario nuevo (pide username, email y contraseña):
+uv run python manage.py createsuperuser
+
+# O, si el usuario ya existe (p. ej. "davidjaras", creado por la migración
+# de datos), definirle/cambiarle la contraseña:
+uv run python manage.py changepassword davidjaras
+
+# Migraciones:
+uv run python manage.py makemigrations   # generar tras cambiar modelos
+uv run python manage.py migrate          # aplicar
+
+# Servidor de desarrollo solo-backend (si no usás ./dev.sh):
+uv run python manage.py runserver 8000
+
+# Consola interactiva de Django:
+uv run python manage.py shell
+```
+
+- **Admin:** http://127.0.0.1:8000/admin/ (o http://localhost:5173/admin/ con
+  el proxy de Vite) — requiere un usuario con `is_staff`. Los modelos del
+  tracker (Session, ActiveTimer, Measurement, WeeklyGoal) están registrados.
+- **Login de la app:** http://localhost:5173/accounts/login/. Cambio de
+  contraseña en `/accounts/password_change/`; reset en
+  `/accounts/password_reset/` (en desarrollo el email se imprime en la
+  consola del `runserver`).
 
 ### Tests
 
@@ -26,8 +67,9 @@ Eso sincroniza dependencias, migra la base y levanta los dos servidores:
 cd backend && uv run pytest
 ```
 
-Cubren la lógica de negocio (agregación diaria/semanal, meta cumplida, racha,
-cronómetro con pausas) y el flujo de registro vía API.
+Cubren la lógica de negocio (agregación diaria/semanal, acumulado de la semana
+en curso, meta cumplida, racha, cronómetro con pausas), el flujo de registro
+vía API y la separación de datos entre usuarios.
 
 ### Estructura
 
@@ -62,7 +104,11 @@ NOTES.md             # decisiones de diseño
 | GET/POST | `/api/measurements/?metric=` | Mediciones (ej. peso) |
 | DELETE | `/api/measurements/<id>/` | Borrar medición |
 | GET/PUT | `/api/goal/?metric=` | Meta semanal (aplica desde la semana actual) |
-| GET | `/api/stats/?metric=&days=&weeks=` | Payload del dashboard |
+| GET | `/api/stats/?metric=&weeks=` | Payload del dashboard (incluye acumulado semanal) |
+| GET | `/api/me/` | Usuario autenticado |
+
+Toda la API requiere sesión autenticada (auth de sesión de Django + CSRF);
+cada usuario ve solo sus propios datos.
 
 ### Extensibilidad
 
@@ -116,8 +162,15 @@ EOF
 
 set -a; source ../.env.prod; set +a
 uv run python manage.py migrate
+uv run python manage.py compilemessages -l es   # necesita gettext (apt install gettext)
 uv run python manage.py collectstatic --no-input
+
+# Contraseña de tu usuario (la migración lo crea sin contraseña utilizable):
+uv run python manage.py changepassword davidjaras
 ```
+
+Nota: el reset de contraseña por email requiere configurar SMTP (variables
+`EMAIL_*` de Django) en producción; si no, usá `changepassword` por consola.
 
 Verificación rápida (opcional): `uv run gunicorn config.wsgi -b 127.0.0.1:8000`
 y abrir `http://<host>:8000/`.

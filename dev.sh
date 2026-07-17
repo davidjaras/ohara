@@ -8,6 +8,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Ensure backend deps + venv exist and the DB is migrated.
 (cd "$ROOT/backend" && uv sync -q && uv run python manage.py migrate --no-input)
 
+# Compile the Spanish message catalog (needs gettext; non-fatal if missing).
+(cd "$ROOT/backend" && uv run python manage.py compilemessages -l es > /dev/null 2>&1) \
+  || echo "warning: could not compile translations (brew install gettext)"
+
 # Ensure frontend deps exist.
 if [ ! -d "$ROOT/frontend/node_modules" ]; then
   (cd "$ROOT/frontend" && npm install)

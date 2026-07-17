@@ -1,5 +1,50 @@
 # NOTES — decisiones de diseño y lecciones
 
+## Auth: sistema nativo de Django, páginas server-rendered
+Login/logout/cambio/reset de password usan `django.contrib.auth.urls` con
+templates propios (CSS inline a juego con el tema). La SPA usa la sesión de
+Django (SessionAuthentication de DRF + CSRF token) y redirige a
+`/accounts/login/` ante 401/403. Sin OAuth ni JWT: para una app personal el
+auth de sesión nativo es lo más simple y estándar.
+
+## Multiusuario: FK a User en todo, backfill en la migración
+`Session/ActiveTimer/Measurement/WeeklyGoal` llevan FK a User y las
+constraints de unicidad son por usuario. La migración 0002 crea al dueño
+(`davidjaras`, staff+superuser, contraseña inutilizable hasta
+`changepassword`) y le asigna todas las filas existentes: cero datos
+perdidos. Los services reciben `user` como primer argumento; las vistas
+filtran por `request.user`.
+
+## i18n en dos capas
+Frontend: react-i18next con diccionarios en `src/lib/i18n.ts` (es default,
+en), elección persistida en localStorage y selector en Ajustes. Backend:
+mensajes de error con gettext (fuente en inglés, catálogo es en
+`backend/locale`); la API traduce según `Accept-Language`, que el cliente
+manda con el idioma activo.
+
+## Acumulado semanal calculado en el backend
+`week_cumulative` devuelve lunes→hoy (nunca días futuros: extender la línea
+plana hasta el domingo sería engañoso). El frontend solo rellena el eje hasta
+el domingo con puntos nulos para que la semana completa sea visible.
+
+## Chulito de la gráfica semanal: shape custom, no LabelList
+El `LabelList` de recharts v3 con `content` custom solo renderizaba una parte
+de las entradas (capa vacía / índices parciales). El check sobre las barras
+cumplidas se dibuja en un `shape` custom del `Bar`, que recibe `payload` y
+posición de forma determinista. Lección: en recharts v3, para adornos por
+barra, `shape` es más confiable que `LabelList`.
+
+## Rangos de las gráficas
+Semanal: 4/12/26/52 semanas (default 12: un trimestre se lee de un vistazo).
+Peso: 1m/3m/1año/todo (default 3m), filtrado client-side porque el volumen de
+mediciones personales es trivial. El acumulado es fijo a la semana en curso
+por diseño.
+
+## CSRF con Vite en desarrollo
+El proxy de Vite (`changeOrigin: true`) hace que Django vea Host
+`127.0.0.1:8000` con Origin `localhost:5173` y rechace el POST. Fix estándar:
+`CSRF_TRUSTED_ORIGINS` con los orígenes de Vite solo en DEBUG.
+
 ## Semana ISO (lunes-domingo)
 Todas las agregaciones semanales, la meta y la racha usan semana ISO. Es el
 estándar y coincide con el uso cotidiano local.
