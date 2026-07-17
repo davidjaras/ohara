@@ -34,6 +34,12 @@ Las duraciones se guardan en segundos; los agregados suman segundos y recién
 al final hacen `// 60`. Evita perder minutos por redondeo por sesión. La meta
 se compara en segundos (`total_seconds >= goal * 60`).
 
+## Resultado del ejercicio de extensibilidad (peso)
+Agregar "peso" (métrica tipo medición) requirió en el backend exactamente una
+entrada en `METRICS` — cero cambios de modelos, migraciones o vistas — más su
+página en el frontend y tests. El núcleo (timer, agregaciones, meta, racha) no
+se tocó, que era el criterio de que el diseño estaba bien.
+
 ## Sesión que cruza medianoche
 Se atribuye al día local en que empezó (comportamiento Garmin). Simple y
 predecible; no se parte en dos.

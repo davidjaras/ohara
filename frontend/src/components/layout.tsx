@@ -1,10 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { History, LayoutDashboard, Settings } from 'lucide-react'
+import { History, LayoutDashboard, Scale, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Panel', icon: LayoutDashboard },
   { to: '/historial', label: 'Historial', icon: History },
+  { to: '/peso', label: 'Peso', icon: Scale },
   { to: '/ajustes', label: 'Ajustes', icon: Settings },
 ]
 

@@ -34,6 +34,12 @@ METRICS: dict[str, Metric] = {
         unit="min",
         default_weekly_goal_minutes=270,  # 3 sessions of 90
     ),
+    "peso": Metric(
+        key="peso",
+        name="Peso",
+        kind=KIND_MEASUREMENT,
+        unit="kg",
+    ),
 }
 
 
