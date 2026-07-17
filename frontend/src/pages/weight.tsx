@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Scale, Trash2 } from 'lucide-react'
 import {
   CartesianGrid,
@@ -15,24 +16,41 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RangeSelect } from '@/components/range-select'
 
 const METRIC = 'peso'
 
-function WeightChart({ data }: { data: Measurement[] }) {
-  // Oldest first, one point per date (the most recent entry wins).
+type WeightRange = '1m' | '3m' | '1y' | 'all'
+
+const RANGE_DAYS: Record<Exclude<WeightRange, 'all'>, number> = {
+  '1m': 30,
+  '3m': 91,
+  '1y': 365,
+}
+
+function WeightChart({ data, range }: { data: Measurement[]; range: WeightRange }) {
+  const { t } = useTranslation()
+
+  // Oldest first, one point per date (the most recent entry wins), limited
+  // to the selected range.
   const points = useMemo(() => {
+    let rows = data
+    if (range !== 'all') {
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - RANGE_DAYS[range])
+      const cutoffISO = cutoff.toISOString().slice(0, 10)
+      rows = data.filter((row) => row.date >= cutoffISO)
+    }
     const byDate = new Map<string, number>()
-    for (const row of [...data].reverse()) byDate.set(row.date, Number(row.value))
+    for (const row of [...rows].reverse()) byDate.set(row.date, Number(row.value))
     return [...byDate.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, value]) => ({ date, value }))
-  }, [data])
+  }, [data, range])
 
   if (points.length < 2) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Registrá al menos dos mediciones para ver la evolución.
-      </p>
+      <p className="py-8 text-center text-sm text-muted-foreground">{t('weight.needTwo')}</p>
     )
   }
 
@@ -82,6 +100,7 @@ function WeightChart({ data }: { data: Measurement[] }) {
 }
 
 function WeightForm({ onSaved }: { onSaved: () => void }) {
+  const { t } = useTranslation()
   const [date, setDate] = useState(todayISO())
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -107,14 +126,14 @@ function WeightForm({ onSaved }: { onSaved: () => void }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Registrar peso</CardTitle>
-        <CardDescription>Una medición puntual por fecha.</CardDescription>
+        <CardTitle>{t('weight.formTitle')}</CardTitle>
+        <CardDescription>{t('weight.formDescription')}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="weight-date">Fecha</Label>
+              <Label htmlFor="weight-date">{t('weight.date')}</Label>
               <Input
                 id="weight-date"
                 type="date"
@@ -125,7 +144,7 @@ function WeightForm({ onSaved }: { onSaved: () => void }) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="weight-value">Peso (kg)</Label>
+              <Label htmlFor="weight-value">{t('weight.value')}</Label>
               <Input
                 id="weight-value"
                 type="number"
@@ -141,7 +160,7 @@ function WeightForm({ onSaved }: { onSaved: () => void }) {
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div>
             <Button type="submit" disabled={saving || !value}>
-              {saving ? 'Guardando…' : 'Guardar medición'}
+              {saving ? t('weight.saving') : t('weight.save')}
             </Button>
           </div>
         </form>
@@ -151,7 +170,9 @@ function WeightForm({ onSaved }: { onSaved: () => void }) {
 }
 
 export function WeightPage() {
+  const { t } = useTranslation()
   const [rows, setRows] = useState<Measurement[]>([])
+  const [range, setRange] = useState<WeightRange>('3m')
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -161,7 +182,7 @@ export function WeightPage() {
   useEffect(load, [load])
 
   const handleDelete = (row: Measurement) => {
-    if (!window.confirm(`¿Borrar la medición del ${formatLongDate(row.date)}?`)) return
+    if (!window.confirm(t('weight.deleteConfirm', { date: formatLongDate(row.date) }))) return
     api.measurements.remove(row.id).then(load, (e: Error) => setError(e.message))
   }
 
@@ -169,25 +190,35 @@ export function WeightPage() {
     <div className="grid gap-4 sm:gap-5">
       <WeightForm onSaved={load} />
       <Card>
-        <CardHeader>
-          <CardTitle>Evolución</CardTitle>
-          <CardDescription>Peso en el tiempo</CardDescription>
+        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+          <div className="grid gap-1.5">
+            <CardTitle>{t('weight.chartTitle')}</CardTitle>
+            <CardDescription>{t('weight.chartDescription')}</CardDescription>
+          </div>
+          <RangeSelect
+            options={[
+              { value: '1m' as const, label: t('ranges.month') },
+              { value: '3m' as const, label: t('ranges.quarter') },
+              { value: '1y' as const, label: t('ranges.year') },
+              { value: 'all' as const, label: t('ranges.all') },
+            ]}
+            value={range}
+            onChange={setRange}
+          />
         </CardHeader>
         <CardContent>
-          <WeightChart data={rows} />
+          <WeightChart data={rows} range={range} />
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Mediciones</CardTitle>
-          <CardDescription>Las más recientes primero.</CardDescription>
+          <CardTitle>{t('weight.listTitle')}</CardTitle>
+          <CardDescription>{t('weight.listDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
           {rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Todavía no hay mediciones.
-            </p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('weight.empty')}</p>
           ) : (
             <ul className="divide-y">
               {rows.map((row) => (
@@ -206,7 +237,7 @@ export function WeightPage() {
                     size="icon"
                     className="text-muted-foreground hover:text-destructive"
                     onClick={() => handleDelete(row)}
-                    aria-label="Borrar medición"
+                    aria-label={t('weight.deleteLabel')}
                   >
                     <Trash2 className="size-4" />
                   </Button>

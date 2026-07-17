@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Circle } from 'lucide-react'
 import type { WeekSummary } from '@/lib/api'
 import { formatMinutes, formatWeekRange } from '@/lib/format'
@@ -10,6 +11,7 @@ interface WeekListProps {
 
 /** Recent weeks with their green check, most recent first. */
 export function WeekList({ weeks, currentWeekStart }: WeekListProps) {
+  const { t } = useTranslation()
   const rows = [...weeks].reverse()
   return (
     <ul className="divide-y">
@@ -25,7 +27,7 @@ export function WeekList({ weeks, currentWeekStart }: WeekListProps) {
             <div className="min-w-0 flex-1">
               <p className={cn('text-sm font-medium', isCurrent && 'text-primary')}>
                 {formatWeekRange(week.week_start)}
-                {isCurrent && ' · en curso'}
+                {isCurrent && ` · ${t('weekList.current')}`}
               </p>
             </div>
             <p className="text-sm tabular-nums text-muted-foreground">

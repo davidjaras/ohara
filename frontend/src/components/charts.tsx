@@ -1,21 +1,23 @@
+import { useTranslation } from 'react-i18next'
 import {
   Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   ComposedChart,
   Line,
+  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import type { DailyPoint, WeekSummary } from '@/lib/api'
+import type { CumulativePoint, WeekSummary } from '@/lib/api'
 import { formatDayTick, formatMinutes, formatShortDate, formatWeekRange } from '@/lib/format'
 
 // Colors come from the theme so charts follow the design tokens.
-const ACCENT = 'var(--chart-1)'
-const DIMMED = 'var(--chart-2)'
+const MET = 'var(--chart-1)' // emerald: goal reached
+const BELOW = 'var(--chart-2)' // blue: below the goal
 const GRID = 'oklch(1 0 0 / 7%)'
 const TICK = { fill: 'var(--muted-foreground)', fontSize: 12 }
 const HOVER_CURSOR = { fill: 'oklch(1 0 0 / 6%)' }
@@ -38,10 +40,36 @@ function ChartTooltip({ title, lines }: TooltipRow) {
   )
 }
 
-export function DailyChart({ data }: { data: DailyPoint[] }) {
+interface CumulativeWeekChartProps {
+  data: CumulativePoint[]
+  goal: number
+}
+
+/** Cumulative minutes across the current week, stopping at today. */
+export function CumulativeWeekChart({ data, goal }: CumulativeWeekChartProps) {
+  const { t } = useTranslation()
+
+  // Pad the week out to Sunday with empty points so the axis always shows
+  // the full week; the line itself deliberately stops at today.
+  const monday = data.length > 0 ? new Date(`${data[0].date}T00:00:00`) : new Date()
+  const points: Array<{ date: string; minutes: number | null; cumulative: number | null }> = []
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(monday)
+    day.setDate(day.getDate() + i)
+    const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(
+      day.getDate(),
+    ).padStart(2, '0')}`
+    const point = data[i]
+    points.push(
+      point && point.date === iso
+        ? { date: iso, minutes: point.minutes, cumulative: point.cumulative_minutes }
+        : { date: iso, minutes: null, cumulative: null },
+    )
+  }
+
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
+      <LineChart data={points} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis
           dataKey="date"
@@ -50,32 +78,100 @@ export function DailyChart({ data }: { data: DailyPoint[] }) {
           tickLine={false}
           axisLine={false}
           interval="preserveStartEnd"
-          minTickGap={24}
+          minTickGap={16}
         />
-        <YAxis tick={TICK} tickLine={false} axisLine={false} allowDecimals={false} />
+        <YAxis
+          tick={TICK}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          domain={[0, (dataMax: number) => Math.ceil(Math.max(dataMax, goal) * 1.08)]}
+        />
         <Tooltip
-          cursor={HOVER_CURSOR}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null
-            const point = payload[0].payload as DailyPoint
+            const point = payload[0].payload as (typeof points)[number]
+            if (point.cumulative === null) return null
             return (
               <ChartTooltip
                 title={formatDayTick(point.date)}
-                lines={[formatMinutes(point.minutes)]}
+                lines={[
+                  `${t('cumulativeChart.accumulated')}: ${formatMinutes(point.cumulative)}`,
+                  `+${formatMinutes(point.minutes ?? 0)}`,
+                ]}
               />
             )
           }}
         />
-        <Bar dataKey="minutes" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={24} />
-      </BarChart>
+        <ReferenceLine
+          y={goal}
+          stroke="oklch(1 0 0 / 35%)"
+          strokeWidth={2}
+          strokeDasharray="4 4"
+        />
+        <Line
+          type="linear"
+          dataKey="cumulative"
+          stroke={MET}
+          strokeWidth={2}
+          dot={{ r: 4, fill: MET, stroke: 'var(--card)', strokeWidth: 2 }}
+          activeDot={{ r: 5 }}
+        />
+      </LineChart>
     </ResponsiveContainer>
   )
 }
 
+interface WeekBarShapeProps {
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  fill?: string
+  radius?: number | [number, number, number, number]
+  payload?: WeekSummary
+}
+
+/** Bar with an emerald check drawn above it when the week met its goal.
+
+    Implemented as a custom shape (not LabelList) so the check renders
+    reliably for every bar. */
+function WeekBarShape(props: WeekBarShapeProps) {
+  const { x = 0, y = 0, width = 0, height = 0, fill, payload } = props
+  const [rtl] = Array.isArray(props.radius) ? props.radius : [4]
+  const r = Math.min(rtl ?? 4, width / 2, height)
+  return (
+    <g>
+      {height > 0 && (
+        <path
+          d={`M ${x},${y + height}
+              L ${x},${y + r}
+              Q ${x},${y} ${x + r},${y}
+              L ${x + width - r},${y}
+              Q ${x + width},${y} ${x + width},${y + r}
+              L ${x + width},${y + height} Z`}
+          fill={fill}
+        />
+      )}
+      {payload?.met && (
+        <path
+          d={`M ${x + width / 2 - 4.5} ${y - 10} l 3 3 l 6 -6.5`}
+          fill="none"
+          stroke={MET}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </g>
+  )
+}
+
 export function WeeklyChart({ data }: { data: WeekSummary[] }) {
+  const { t } = useTranslation()
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <ComposedChart data={data} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
+      <ComposedChart data={data} margin={{ top: 18, right: 4, left: -16, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis
           dataKey="week_start"
@@ -94,20 +190,26 @@ export function WeeklyChart({ data }: { data: WeekSummary[] }) {
             const week = payload[0].payload as WeekSummary
             return (
               <ChartTooltip
-                title={`Semana del ${formatWeekRange(week.week_start)}`}
+                title={t('weeklyChart.weekOf', { range: formatWeekRange(week.week_start) })}
                 lines={[
                   formatMinutes(week.minutes),
-                  `Meta: ${formatMinutes(week.goal_minutes)}`,
-                  week.met ? 'Meta cumplida ✓' : 'Meta no cumplida',
+                  t('weeklyChart.goal', { goal: formatMinutes(week.goal_minutes) }),
+                  week.met ? t('weeklyChart.met') : t('weeklyChart.notMet'),
                 ]}
               />
             )
           }}
         />
-        {/* Weeks that met their goal are emerald; the rest stay dimmed. */}
-        <Bar dataKey="minutes" radius={[4, 4, 0, 0]} maxBarSize={24}>
+        {/* Blue while below the weekly goal, emerald once it is met; the
+            check above the bar is a deliberate redundant signal. */}
+        <Bar
+          dataKey="minutes"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={24}
+          shape={(props: unknown) => <WeekBarShape {...(props as WeekBarShapeProps)} />}
+        >
           {data.map((week) => (
-            <Cell key={week.week_start} fill={week.met ? ACCENT : DIMMED} />
+            <Cell key={week.week_start} fill={week.met ? MET : BELOW} />
           ))}
         </Bar>
         {/* Step line showing the goal in effect on each week. */}

@@ -18,6 +18,14 @@ DEBUG = os.environ.get("OHARA_DEBUG", "1") == "1"
 
 ALLOWED_HOSTS = os.environ.get("OHARA_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# In development the SPA is served by Vite on :5173 and proxies to Django,
+# so cross-origin POSTs (login form, API writes) need to be trusted.
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    "OHARA_CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173" if DEBUG else "",
+).split(",")
+CSRF_TRUSTED_ORIGINS = [origin for origin in CSRF_TRUSTED_ORIGINS if origin]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

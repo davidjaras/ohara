@@ -1,18 +1,23 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { History, LayoutDashboard, Scale, Settings } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { History, LayoutDashboard, LogOut, Scale, Settings } from 'lucide-react'
+import { api, logout } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Panel', icon: LayoutDashboard },
-  { to: '/historial', label: 'Historial', icon: History },
-  { to: '/peso', label: 'Peso', icon: Scale },
-  { to: '/ajustes', label: 'Ajustes', icon: Settings },
+  { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
+  { to: '/historial', key: 'nav.history', icon: History },
+  { to: '/peso', key: 'nav.weight', icon: Scale },
+  { to: '/ajustes', key: 'nav.settings', icon: Settings },
 ]
 
 function DesktopNav() {
+  const { t } = useTranslation()
   return (
     <nav className="hidden items-center gap-1 sm:flex">
-      {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+      {NAV_ITEMS.map(({ to, key, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -27,7 +32,7 @@ function DesktopNav() {
           }
         >
           <Icon className="size-4" />
-          {label}
+          {t(key)}
         </NavLink>
       ))}
     </nav>
@@ -35,13 +40,14 @@ function DesktopNav() {
 }
 
 function MobileTabBar() {
+  const { t } = useTranslation()
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur sm:hidden">
       <div
         className="grid"
         style={{ gridTemplateColumns: `repeat(${NAV_ITEMS.length}, 1fr)` }}
       >
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ to, key, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -54,7 +60,7 @@ function MobileTabBar() {
             }
           >
             <Icon className="size-5" />
-            {label}
+            {t(key)}
           </NavLink>
         ))}
       </div>
@@ -63,6 +69,13 @@ function MobileTabBar() {
 }
 
 export function Layout() {
+  const { t } = useTranslation()
+  const [username, setUsername] = useState('')
+
+  useEffect(() => {
+    api.me().then((me) => setUsername(me.username), () => {})
+  }, [])
+
   return (
     <div className="min-h-svh">
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
@@ -71,7 +84,22 @@ export function Layout() {
             <span className="size-2.5 rounded-full bg-primary" />
             ohara
           </NavLink>
-          <DesktopNav />
+          <div className="flex items-center gap-2">
+            <DesktopNav />
+            <div className="hidden items-center gap-1 sm:flex">
+              <span className="ml-2 text-sm text-muted-foreground">{username}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => void logout()}
+                aria-label={t('nav.logout')}
+                title={t('nav.logout')}
+              >
+                <LogOut className="size-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:pb-10">

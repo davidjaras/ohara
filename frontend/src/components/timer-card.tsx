@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Pause, Play, Square, Trash2 } from 'lucide-react'
 import { api, type TimerState } from '@/lib/api'
 import { formatClock, formatMinutes } from '@/lib/format'
@@ -21,6 +22,7 @@ interface TimerCardProps {
 }
 
 export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
+  const { t } = useTranslation()
   const [timer, setTimer] = useState<TimerState | null>(null)
   // Reference point to extrapolate the server-reported elapsed time locally.
   const fetchedAtRef = useRef(performance.now())
@@ -45,7 +47,7 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
   // Re-render every second while the clock is running.
   useEffect(() => {
     if (!running) return
-    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    const id = setInterval(() => setTick((n) => n + 1), 1000)
     return () => clearInterval(id)
   }, [running])
 
@@ -76,7 +78,7 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
   }
 
   const handleDiscard = () => {
-    if (!window.confirm('¿Descartar la sesión en curso? El tiempo no se guardará.')) return
+    if (!window.confirm(t('timer.discardConfirm'))) return
     api.timer.discard(metric).then(
       () => setTimer({ active: false }),
       (e: Error) => setError(e.message),
@@ -87,26 +89,28 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
     <Card>
       <CardContent className="p-5 sm:p-6">
         {timer === null ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">{t('timer.loading')}</p>
         ) : !timer.active ? (
           <div className="flex flex-col items-center gap-3 py-4">
-            <Button size="lg" className="h-12 px-8 text-base" onClick={() => act(() => api.timer.start(metric))}>
+            <Button
+              size="lg"
+              className="h-12 px-8 text-base"
+              onClick={() => act(() => api.timer.start(metric))}
+            >
               <Play className="size-5" />
-              Iniciar sesión de estudio
+              {t('timer.start')}
             </Button>
-            <p className="text-sm text-muted-foreground">
-              El cronómetro sigue corriendo aunque cierres esta pestaña.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('timer.keepsRunning')}</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-5 py-2">
             <div className="flex items-center gap-2 text-sm">
               {timer.is_paused ? (
-                <span className="text-muted-foreground">En pausa</span>
+                <span className="text-muted-foreground">{t('timer.paused')}</span>
               ) : (
                 <>
                   <span className="size-2 animate-pulse rounded-full bg-primary" />
-                  <span className="text-primary">En curso</span>
+                  <span className="text-primary">{t('timer.running')}</span>
                 </>
               )}
             </div>
@@ -115,23 +119,36 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
               {timer.is_paused ? (
-                <Button variant="outline" size="lg" onClick={() => act(() => api.timer.resume(metric))}>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => act(() => api.timer.resume(metric))}
+                >
                   <Play className="size-4" />
-                  Reanudar
+                  {t('timer.resume')}
                 </Button>
               ) : (
-                <Button variant="outline" size="lg" onClick={() => act(() => api.timer.pause(metric))}>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => act(() => api.timer.pause(metric))}
+                >
                   <Pause className="size-4" />
-                  Pausar
+                  {t('timer.pause')}
                 </Button>
               )}
               <Button size="lg" onClick={() => setFinishOpen(true)}>
                 <Square className="size-4" />
-                Finalizar sesión
+                {t('timer.finish')}
               </Button>
-              <Button variant="ghost" size="lg" className="text-muted-foreground" onClick={handleDiscard}>
+              <Button
+                variant="ghost"
+                size="lg"
+                className="text-muted-foreground"
+                onClick={handleDiscard}
+              >
                 <Trash2 className="size-4" />
-                Descartar
+                {t('timer.discard')}
               </Button>
             </div>
           </div>
@@ -142,31 +159,29 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
       <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Finalizar sesión</DialogTitle>
+            <DialogTitle>{t('timer.finishTitle')}</DialogTitle>
             <DialogDescription>
-              Tiempo estudiado: {formatMinutes(Math.floor(elapsedSeconds / 60))}
+              {t('timer.studied', { duration: formatMinutes(Math.floor(elapsedSeconds / 60)) })}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
-            <Label htmlFor="session-note">¿Qué estudiaste y qué aprendiste?</Label>
+            <Label htmlFor="session-note">{t('timer.noteLabel')}</Label>
             <Textarea
               id="session-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Ej. Repasé índices en Postgres; aprendí cuándo conviene un índice parcial."
+              placeholder={t('timer.notePlaceholder')}
               rows={4}
               autoFocus
             />
-            <p className="text-sm text-muted-foreground">
-              La nota queda guardada junto con la sesión.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('timer.noteHint')}</p>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setFinishOpen(false)} disabled={saving}>
-              Cancelar
+              {t('timer.cancel')}
             </Button>
             <Button onClick={handleFinish} disabled={saving}>
-              {saving ? 'Guardando…' : 'Guardar sesión'}
+              {saving ? t('timer.saving') : t('timer.save')}
             </Button>
           </DialogFooter>
         </DialogContent>

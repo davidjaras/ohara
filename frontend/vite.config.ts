@@ -13,8 +13,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // The Django API runs on :8000 in development.
+      // Django runs on :8000 in development; the SPA shares its origin for
+      // the API, the auth pages and the admin.
       '/api': 'http://127.0.0.1:8000',
+      '/accounts': 'http://127.0.0.1:8000',
+      '/admin': 'http://127.0.0.1:8000',
+      '/static': 'http://127.0.0.1:8000',
     },
   },
 })

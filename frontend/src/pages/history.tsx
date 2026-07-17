@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Timer, Trash2 } from 'lucide-react'
 import { api, type Session } from '@/lib/api'
 import { formatLongDate, formatMinutes, todayISO } from '@/lib/format'
@@ -11,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 const METRIC = 'estudio'
 
 function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
+  const { t } = useTranslation()
   const [date, setDate] = useState(todayISO())
   const [minutes, setMinutes] = useState('')
   const [note, setNote] = useState('')
@@ -40,14 +42,14 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Registro manual</CardTitle>
-        <CardDescription>Rellená sesiones pasadas que no cronometraste.</CardDescription>
+        <CardTitle>{t('history.manualTitle')}</CardTitle>
+        <CardDescription>{t('history.manualDescription')}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="entry-date">Fecha</Label>
+              <Label htmlFor="entry-date">{t('history.date')}</Label>
               <Input
                 id="entry-date"
                 type="date"
@@ -58,7 +60,7 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="entry-minutes">Minutos</Label>
+              <Label htmlFor="entry-minutes">{t('history.minutes')}</Label>
               <Input
                 id="entry-minutes"
                 type="number"
@@ -71,20 +73,20 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="entry-note">Nota</Label>
+            <Label htmlFor="entry-note">{t('history.note')}</Label>
             <Textarea
               id="entry-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="¿Qué estudiaste y qué aprendiste?"
+              placeholder={t('timer.noteLabel')}
               rows={3}
             />
-            <p className="text-sm text-muted-foreground">Opcional, pero tu yo futuro la agradece.</p>
+            <p className="text-sm text-muted-foreground">{t('history.noteHint')}</p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div>
             <Button type="submit" disabled={saving || !minutes}>
-              {saving ? 'Guardando…' : 'Guardar registro'}
+              {saving ? t('history.saving') : t('history.save')}
             </Button>
           </div>
         </form>
@@ -94,18 +96,17 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
 }
 
 function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: () => void }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
   const handleDelete = (session: Session) => {
-    if (!window.confirm(`¿Borrar la sesión del ${formatLongDate(session.date)}?`)) return
+    if (!window.confirm(t('history.deleteConfirm', { date: formatLongDate(session.date) }))) return
     api.sessions.remove(session.id).then(onDeleted, (e: Error) => setError(e.message))
   }
 
   if (sessions.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Todavía no hay sesiones registradas.
-      </p>
+      <p className="py-8 text-center text-sm text-muted-foreground">{t('history.empty')}</p>
     )
   }
 
@@ -125,7 +126,9 @@ function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: 
                   {formatMinutes(session.minutes)}
                 </span>
                 {!session.started_at && (
-                  <span className="ml-2 text-xs text-muted-foreground">manual</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {t('history.manualTag')}
+                  </span>
                 )}
               </p>
               {session.note && (
@@ -139,7 +142,7 @@ function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: 
               size="icon"
               className="text-muted-foreground hover:text-destructive"
               onClick={() => handleDelete(session)}
-              aria-label="Borrar sesión"
+              aria-label={t('history.deleteLabel')}
             >
               <Trash2 className="size-4" />
             </Button>
@@ -151,6 +154,7 @@ function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: 
 }
 
 export function HistoryPage() {
+  const { t } = useTranslation()
   const [sessions, setSessions] = useState<Session[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -165,8 +169,8 @@ export function HistoryPage() {
       <ManualEntryForm onSaved={load} />
       <Card>
         <CardHeader>
-          <CardTitle>Sesiones</CardTitle>
-          <CardDescription>Las más recientes primero.</CardDescription>
+          <CardTitle>{t('history.sessionsTitle')}</CardTitle>
+          <CardDescription>{t('history.sessionsDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (

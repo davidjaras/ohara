@@ -1,5 +1,9 @@
 // Typed client for the Django REST API. In development Vite proxies /api to
 // the backend (see vite.config.ts); in production both share the origin.
+// Auth is Django's session auth: unauthenticated responses redirect the
+// browser to the native login page.
+
+import i18n from '@/lib/i18n'
 
 export interface Metric {
   key: string
@@ -39,9 +43,10 @@ export interface Measurement {
   created_at: string
 }
 
-export interface DailyPoint {
+export interface CumulativePoint {
   date: string
   minutes: number
+  cumulative_minutes: number
 }
 
 export interface WeekSummary {
@@ -54,13 +59,12 @@ export interface WeekSummary {
 export interface Stats {
   metric: string
   today: string
-  today_minutes: number
   week_minutes: number
   week_goal_minutes: number
   week_met: boolean
   streak_weeks: number
   total_minutes: number
-  daily: DailyPoint[]
+  week_cumulative: CumulativePoint[]
   weekly: WeekSummary[]
 }
 
@@ -73,11 +77,31 @@ export class ApiError extends Error {
   }
 }
 
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+export function loginUrl(): string {
+  const next = encodeURIComponent(window.location.pathname)
+  return `/accounts/login/?next=${next}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  })
+  const method = init?.method ?? 'GET'
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept-Language': i18n.language,
+  }
+  if (method !== 'GET') {
+    headers['X-CSRFToken'] = getCookie('csrftoken') ?? ''
+  }
+  const res = await fetch(path, { credentials: 'same-origin', ...init, headers })
+  if (res.status === 401 || res.status === 403) {
+    // Session expired or not signed in: send the browser to the login page.
+    window.location.assign(loginUrl())
+    return new Promise<T>(() => {}) // never resolves; navigation is underway
+  }
   if (!res.ok) {
     let detail = `Error ${res.status}`
     try {
@@ -92,7 +116,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
+/** POST to Django's native logout view, then land on the login page. */
+export async function logout(): Promise<void> {
+  await fetch('/accounts/logout/', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-CSRFToken': getCookie('csrftoken') ?? '' },
+  })
+  window.location.assign('/accounts/login/')
+}
+
 export const api = {
+  me: () => request<{ username: string }>('/api/me/'),
+
   metrics: () => request<Metric[]>('/api/metrics/'),
 
   timer: {
@@ -130,7 +166,7 @@ export const api = {
   },
 
   measurements: {
-    list: (metric: string, limit = 100) =>
+    list: (metric: string, limit = 1000) =>
       request<Measurement[]>(`/api/measurements/?metric=${metric}&limit=${limit}`),
     create: (data: { metric: string; date: string; value: number; note: string }) =>
       request<Measurement>('/api/measurements/', { method: 'POST', body: JSON.stringify(data) }),
@@ -147,6 +183,6 @@ export const api = {
       }),
   },
 
-  stats: (metric: string, days = 14, weeks = 12) =>
-    request<Stats>(`/api/stats/?metric=${metric}&days=${days}&weeks=${weeks}`),
+  stats: (metric: string, weeks = 12) =>
+    request<Stats>(`/api/stats/?metric=${metric}&weeks=${weeks}`),
 }
