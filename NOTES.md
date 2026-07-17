@@ -1,5 +1,11 @@
 # NOTES — decisiones de diseño y lecciones
 
+## Logo inicial: O circular abierta
+La apertura queda centrada a la 1:30, mide 50° y usa un trazo constante de 7
+unidades sobre un viewBox de 64. `currentColor` es canónico para controlar las
+variantes desde CSS sin duplicar geometría. Los rasterizados se aplazaron
+deliberadamente.
+
 ## Auth: sistema nativo de Django, páginas server-rendered
 Login/logout/cambio/reset de password usan `django.contrib.auth.urls` con
 templates propios (CSS inline a juego con el tema). La SPA usa la sesión de

@@ -4,10 +4,12 @@ import { DashboardPage } from '@/pages/dashboard'
 import { HistoryPage } from '@/pages/history'
 import { SettingsPage } from '@/pages/settings'
 import { WeightPage } from '@/pages/weight'
+import { BrandPreview } from '@/pages/BrandPreview'
 
 export default function App() {
   return (
     <Routes>
+      <Route path="brand-preview" element={<BrandPreview />} />
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
         <Route path="historial" element={<HistoryPage />} />
