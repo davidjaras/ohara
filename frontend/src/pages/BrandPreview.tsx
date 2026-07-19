@@ -1,4 +1,4 @@
-import { OHARA_EMERALD, OHARA_LOGO_GEOMETRY } from '@/components/brand/geometry'
+import { OHARA_AZURE, OHARA_LOGO_GEOMETRY } from '@/components/brand/geometry'
 import { OharaLogo } from '@/components/brand/OharaLogo'
 
 const SIZES = [16, 24, 32, 48, 64, 128, 256] as const
@@ -36,9 +36,9 @@ function CandidateLogo({ gapDegrees }: { gapDegrees: number }) {
 
 const CONTEXTS = [
   {
-    label: 'Emerald on dark',
+    label: 'Azure on dark',
     background: '#0B0F0D',
-    foreground: OHARA_EMERALD,
+    foreground: OHARA_AZURE,
     border: 'rgba(245, 245, 245, 0.14)',
   },
   {
@@ -48,9 +48,9 @@ const CONTEXTS = [
     border: 'rgba(245, 245, 245, 0.14)',
   },
   {
-    label: 'Emerald on light',
+    label: 'Azure on light',
     background: '#F5F5F5',
-    foreground: OHARA_EMERALD,
+    foreground: OHARA_AZURE,
     border: 'rgba(11, 15, 13, 0.14)',
   },
   {
@@ -66,10 +66,10 @@ export function BrandPreview() {
     <main className="min-h-svh bg-[#0B0F0D] text-[#F5F5F5]">
       <header className="border-b border-white/10">
         <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
-          <div className="mb-8 flex size-28 items-center justify-center rounded-[22px] border border-white/10 bg-[#0B0F0D]" style={{ color: OHARA_EMERALD }}>
+          <div className="mb-8 flex size-28 items-center justify-center rounded-[22px] border border-white/10 bg-[#0B0F0D]" style={{ color: OHARA_AZURE }}>
             <OharaLogo size={76} title="Ohara" />
           </div>
-          <p className="mb-3 text-xs font-semibold uppercase" style={{ color: OHARA_EMERALD }}>
+          <p className="mb-3 text-xs font-semibold uppercase" style={{ color: OHARA_AZURE }}>
             Internal brand review
           </p>
           <h1 className="text-3xl font-semibold sm:text-4xl">ohara symbol</h1>
@@ -95,7 +95,7 @@ export function BrandPreview() {
                 key={candidate.name}
                 className="rounded-md border border-white/10 bg-white/[0.025] p-5"
               >
-                <div className="flex aspect-square items-center justify-center" style={{ color: OHARA_EMERALD }}>
+                <div className="flex aspect-square items-center justify-center" style={{ color: OHARA_AZURE }}>
                   {candidate.gapDegrees === OHARA_LOGO_GEOMETRY.gapDegrees ? (
                     <OharaLogo size={128} />
                   ) : (
@@ -110,7 +110,7 @@ export function BrandPreview() {
                   <div className="text-right">
                     <p className="font-mono text-sm">{candidate.gapDegrees}°</p>
                     {candidate.gapDegrees === OHARA_LOGO_GEOMETRY.gapDegrees && (
-                      <p className="mt-1 text-xs font-medium" style={{ color: OHARA_EMERALD }}>Selected</p>
+                      <p className="mt-1 text-xs font-medium" style={{ color: OHARA_AZURE }}>Selected</p>
                     )}
                   </div>
                 </div>
@@ -123,7 +123,7 @@ export function BrandPreview() {
       <section className="border-b border-white/10 bg-white/[0.018]">
         <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10 sm:px-8 sm:py-14 md:grid-cols-[1fr_2fr]">
           <div>
-            <p className="text-xs font-medium uppercase" style={{ color: OHARA_EMERALD }}>Canonical</p>
+            <p className="text-xs font-medium uppercase" style={{ color: OHARA_AZURE }}>Canonical</p>
             <h2 className="mt-2 text-xl font-semibold">Candidate B</h2>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-5 text-sm sm:grid-cols-4">
@@ -156,7 +156,7 @@ export function BrandPreview() {
               <div key={size} className="grid shrink-0 justify-items-center gap-3">
                 <div
                   className="flex items-center justify-center"
-                  style={{ color: OHARA_EMERALD, width: size, height: size }}
+                  style={{ color: OHARA_AZURE, width: size, height: size }}
                 >
                   <OharaLogo size={size} />
                 </div>

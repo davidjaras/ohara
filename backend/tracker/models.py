@@ -110,3 +110,17 @@ class WeeklyGoal(models.Model):
 
     def __str__(self) -> str:
         return f"{self.metric} from {self.week_start}: {self.minutes} min"
+
+
+class UserPreference(models.Model):
+    """Per-user UI preferences. Currently just the accent color of the theme."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="preference"
+    )
+    accent_color = models.CharField(
+        max_length=20, default=settings.DEFAULT_ACCENT_COLOR
+    )
+
+    def __str__(self) -> str:
+        return f"{self.user}: {self.accent_color}"

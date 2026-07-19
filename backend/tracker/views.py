@@ -9,13 +9,14 @@ from rest_framework.views import APIView
 
 from . import services
 from .metrics import get_metric, list_metrics
-from .models import ActiveTimer, Measurement, Session
+from .models import ActiveTimer, Measurement, Session, UserPreference
 from .serializers import (
     FinishTimerSerializer,
     GoalInputSerializer,
     ManualSessionInputSerializer,
     MeasurementInputSerializer,
     MeasurementSerializer,
+    PreferencesSerializer,
     SessionSerializer,
     TimerActionSerializer,
 )
@@ -188,6 +189,22 @@ class GoalView(APIView):
         except ValueError as e:
             return _error(str(e), status.HTTP_400_BAD_REQUEST)
         return Response({"metric": row.metric, "minutes": row.minutes})
+
+
+class PreferencesView(APIView):
+    """Per-user UI preferences (accent color of the theme)."""
+
+    def get(self, request):
+        pref, _created = UserPreference.objects.get_or_create(user=request.user)
+        return Response({"accent_color": pref.accent_color})
+
+    def put(self, request):
+        serializer = PreferencesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        pref, _created = UserPreference.objects.get_or_create(user=request.user)
+        pref.accent_color = serializer.validated_data["accent_color"]
+        pref.save(update_fields=["accent_color"])
+        return Response({"accent_color": pref.accent_color})
 
 
 class StatsView(APIView):

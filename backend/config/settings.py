@@ -154,3 +154,8 @@ METRICS = {
         "unit": "kg",
     },
 }
+
+# Selectable accent colors for the per-user theme. The visual values live in the
+# frontend (index.css); the backend only stores which one the user picked.
+ACCENT_COLORS = ["blue", "green", "teal", "violet", "rose", "amber", "coral"]
+DEFAULT_ACCENT_COLOR = "blue"

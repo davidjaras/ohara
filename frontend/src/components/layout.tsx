@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { History, LayoutDashboard, LogOut, Scale, Settings } from 'lucide-react'
 import { api, logout } from '@/lib/api'
+import { setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { OharaLogo } from '@/components/brand/OharaLogo'
@@ -75,6 +76,11 @@ export function Layout() {
 
   useEffect(() => {
     api.me().then((me) => setUsername(me.username), () => {})
+    // Reconcile the accent with the server value (localStorage was already
+    // applied synchronously at startup, so this only corrects a stale cache).
+    api.preferences.get().then((pref) => {
+      if (pref.accent_color !== storedAccent()) setAccent(pref.accent_color)
+    }, () => {})
   }, [])
 
   return (
