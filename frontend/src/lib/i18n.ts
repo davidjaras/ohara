@@ -14,7 +14,6 @@ const es = {
     history: 'Historial',
     weight: 'Peso',
     settings: 'Ajustes',
-    logout: 'Salir',
   },
   stats: {
     streak: 'Racha',
@@ -152,7 +151,6 @@ const en: typeof es = {
     history: 'History',
     weight: 'Weight',
     settings: 'Settings',
-    logout: 'Log out',
   },
   stats: {
     streak: 'Streak',

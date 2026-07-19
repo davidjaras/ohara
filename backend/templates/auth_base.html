@@ -16,7 +16,7 @@
     border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px;
     padding: 28px; box-sizing: border-box;
   }
-  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 1.05rem; margin-bottom: 18px; }
+  .brand { display: flex; justify-content: center; margin-bottom: 20px; }
   .brand svg { color: #3ea6d0; }
   h1 { font-size: 1.15rem; margin: 0 0 4px; }
   .muted { color: #9aa0a6; font-size: .875rem; }
@@ -47,12 +47,11 @@
 <main class="card">
   <div class="brand">
     <!-- Ohara symbol: canonical geometry from docs/brand.md -->
-    <svg width="24" height="24" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <svg width="56" height="56" viewBox="0 0 64 64" fill="none" role="img" aria-label="ohara">
       <circle cx="32" cy="32" r="20" stroke="currentColor" stroke-width="7"
         stroke-linecap="round" pathLength="360" stroke-dasharray="310 50"
         transform="rotate(-20 32 32)" />
     </svg>
-    ohara
   </div>
   {% block content %}{% endblock %}
 </main>

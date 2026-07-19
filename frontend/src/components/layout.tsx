@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { History, LayoutDashboard, LogOut, Scale, Settings } from 'lucide-react'
-import { api, logout } from '@/lib/api'
+import { History, LayoutDashboard, Scale, Settings } from 'lucide-react'
+import { api } from '@/lib/api'
 import { setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { OharaLogo } from '@/components/brand/OharaLogo'
 
 const NAV_ITEMS = [
@@ -71,7 +70,6 @@ function MobileTabBar() {
 }
 
 export function Layout() {
-  const { t } = useTranslation()
   const [username, setUsername] = useState('')
 
   useEffect(() => {
@@ -88,24 +86,14 @@ export function Layout() {
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <NavLink to="/" className="flex items-center gap-2 text-lg font-semibold">
-            <OharaLogo size={22} className="text-primary" />
+            <OharaLogo size={28} className="text-primary" />
             ohara
           </NavLink>
           <div className="flex items-center gap-2">
             <DesktopNav />
-            <div className="hidden items-center gap-1 sm:flex">
-              <span className="ml-2 text-sm text-muted-foreground">{username}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => void logout()}
-                aria-label={t('nav.logout')}
-                title={t('nav.logout')}
-              >
-                <LogOut className="size-4" />
-              </Button>
-            </div>
+            <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
+              {username}
+            </span>
           </div>
         </div>
       </header>
