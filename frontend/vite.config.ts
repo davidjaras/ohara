@@ -13,12 +13,13 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Django runs on :8000 in development; the SPA shares its origin for
-      // the API, the auth pages and the admin.
-      '/api': 'http://127.0.0.1:8000',
-      '/accounts': 'http://127.0.0.1:8000',
-      '/admin': 'http://127.0.0.1:8000',
-      '/static': 'http://127.0.0.1:8000',
+      // The SPA shares its origin with Django for the API, the auth pages and
+      // the admin. Inside docker-compose the backend is reached by service
+      // name; OHARA_API_ORIGIN overrides the default for that case.
+      '/api': process.env.OHARA_API_ORIGIN ?? 'http://127.0.0.1:8000',
+      '/accounts': process.env.OHARA_API_ORIGIN ?? 'http://127.0.0.1:8000',
+      '/admin': process.env.OHARA_API_ORIGIN ?? 'http://127.0.0.1:8000',
+      '/static': process.env.OHARA_API_ORIGIN ?? 'http://127.0.0.1:8000',
     },
   },
 })

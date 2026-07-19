@@ -7,6 +7,8 @@ from OHARA_* variables with development-friendly defaults.
 import os
 from pathlib import Path
 
+import dj_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get(
@@ -70,11 +72,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Postgres everywhere: docker-compose provides DATABASE_URL in containers,
+# and the default targets the compose db's published port for host-side runs
+# (e.g. pytest outside Docker).
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.environ.get("OHARA_DB_PATH", BASE_DIR / "db.sqlite3"),
-    }
+    "default": dj_database_url.config(
+        default="postgres://ohara:ohara@localhost:5432/ohara",
+        conn_max_age=600,
+    )
 }
 
 
