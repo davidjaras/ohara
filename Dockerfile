@@ -39,5 +39,8 @@ COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 # commands never touch secrets or the DB, so a placeholder is fine.
 RUN OHARA_SECRET_KEY=build-placeholder uv run python manage.py compilemessages -l es \
     && OHARA_SECRET_KEY=build-placeholder uv run python manage.py collectstatic --no-input
-# Migrations run on every boot so each Railway deploy is self-migrating.
-CMD ["sh", "-c", "uv run python manage.py migrate --no-input && uv run gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2"]
+# Fixed port: Railway's domain must target 8000 (config lives in the repo,
+# not in dashboard variables). Migrations run on every boot so each deploy
+# is self-migrating.
+EXPOSE 8000
+CMD ["sh", "-c", "uv run python manage.py migrate --no-input && uv run gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 2"]
