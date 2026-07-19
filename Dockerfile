@@ -31,10 +31,13 @@ CMD ["uv", "run", "python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 # ---------- production (Railway) ----------
 FROM backend-base AS prod
+ENV DJANGO_SETTINGS_MODULE=config.settings.prod
 RUN uv sync --frozen --no-dev
 COPY backend/ ./
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
-RUN uv run python manage.py compilemessages -l es \
-    && uv run python manage.py collectstatic --no-input
+# prod settings require OHARA_SECRET_KEY at import time; these build-time
+# commands never touch secrets or the DB, so a placeholder is fine.
+RUN OHARA_SECRET_KEY=build-placeholder uv run python manage.py compilemessages -l es \
+    && OHARA_SECRET_KEY=build-placeholder uv run python manage.py collectstatic --no-input
 # Migrations run on every boot so each Railway deploy is self-migrating.
 CMD ["sh", "-c", "uv run python manage.py migrate --no-input && uv run gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2"]

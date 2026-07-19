@@ -21,6 +21,7 @@ services:
       context: .
       target: dev
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
       DATABASE_URL: postgres://ohara:ohara@db:5432/ohara
       # The Vite proxy forwards requests with Host "backend:8000".
       OHARA_ALLOWED_HOSTS: localhost,127.0.0.1,backend

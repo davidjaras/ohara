@@ -1,7 +1,7 @@
-"""Django settings for ohara.
+"""Shared Django settings for ohara.
 
-Single-user, local-first personal app. Sensitive/environment values come
-from OHARA_* variables with development-friendly defaults.
+Environment-specific values live in dev.py / prod.py; sensitive values come
+from OHARA_* variables and the database from DATABASE_URL.
 """
 
 import os
@@ -9,24 +9,9 @@ from pathlib import Path
 
 import dj_database_url
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-SECRET_KEY = os.environ.get(
-    "OHARA_SECRET_KEY",
-    "django-insecure-dev-only-key-cambiar-en-produccion",
-)
-
-DEBUG = os.environ.get("OHARA_DEBUG", "1") == "1"
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 ALLOWED_HOSTS = os.environ.get("OHARA_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-
-# In development the SPA is served by Vite on :5173 and proxies to Django,
-# so cross-origin POSTs (login form, API writes) need to be trusted.
-CSRF_TRUSTED_ORIGINS = os.environ.get(
-    "OHARA_CSRF_TRUSTED_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173" if DEBUG else "",
-).split(",")
-CSRF_TRUSTED_ORIGINS = [origin for origin in CSRF_TRUSTED_ORIGINS if origin]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -109,17 +94,11 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
-# Password-reset emails: printed to the console in development.
-if DEBUG:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("OHARA_FROM_EMAIL", "ohara@localhost")
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_ROOT = FRONTEND_DIST if FRONTEND_DIST.exists() else None
-# In development whitenoise serves straight from the filesystem (no collectstatic).
-WHITENOISE_AUTOREFRESH = DEBUG
-WHITENOISE_USE_FINDERS = DEBUG
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
