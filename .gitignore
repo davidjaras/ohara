@@ -2,7 +2,6 @@
 __pycache__/
 *.pyc
 .venv/
-backend/db.sqlite3
 backend/staticfiles/
 .pytest_cache/
 
@@ -15,6 +14,5 @@ frontend/dist/
 .idea/
 .vscode/
 
-# Local database backups and compiled translations
-backend/db.sqlite3.backup*
+# Compiled translations
 backend/locale/**/*.mo

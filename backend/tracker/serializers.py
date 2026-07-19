@@ -57,3 +57,7 @@ class FinishTimerSerializer(serializers.Serializer):
 
 class TimerActionSerializer(serializers.Serializer):
     metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
+
+
+class PreferencesSerializer(serializers.Serializer):
+    accent_color = serializers.ChoiceField(choices=settings.ACCENT_COLORS)

@@ -183,6 +183,15 @@ export const api = {
       }),
   },
 
+  preferences: {
+    get: () => request<{ accent_color: string }>('/api/preferences/'),
+    set: (accent: string) =>
+      request<{ accent_color: string }>('/api/preferences/', {
+        method: 'PUT',
+        body: JSON.stringify({ accent_color: accent }),
+      }),
+  },
+
   stats: (metric: string, weeks = 12) =>
     request<Stats>(`/api/stats/?metric=${metric}&weeks=${weeks}`),
 }

@@ -16,8 +16,8 @@ import type { CumulativePoint, WeekSummary } from '@/lib/api'
 import { formatDayTick, formatMinutes, formatShortDate, formatWeekRange } from '@/lib/format'
 
 // Colors come from the theme so charts follow the design tokens.
-const MET = 'var(--chart-1)' // emerald: goal reached
-const BELOW = 'var(--chart-2)' // blue: below the goal
+const MET = 'var(--chart-1)' // azure: goal reached
+const BELOW = 'var(--chart-2)' // neutral gray: below the goal
 const GRID = 'oklch(1 0 0 / 7%)'
 const TICK = { fill: 'var(--muted-foreground)', fontSize: 12 }
 const HOVER_CURSOR = { fill: 'oklch(1 0 0 / 6%)' }
@@ -132,7 +132,7 @@ interface WeekBarShapeProps {
   payload?: WeekSummary
 }
 
-/** Bar with an emerald check drawn above it when the week met its goal.
+/** Bar with an azure check drawn above it when the week met its goal.
 
     Implemented as a custom shape (not LabelList) so the check renders
     reliably for every bar. */
@@ -200,7 +200,7 @@ export function WeeklyChart({ data }: { data: WeekSummary[] }) {
             )
           }}
         />
-        {/* Blue while below the weekly goal, emerald once it is met; the
+        {/* Gray while below the weekly goal, azure once it is met; the
             check above the bar is a deliberate redundant signal. */}
         <Bar
           dataKey="minutes"

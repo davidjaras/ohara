@@ -13,5 +13,6 @@ urlpatterns = [
     path("measurements/", views.MeasurementListView.as_view()),
     path("measurements/<int:pk>/", views.MeasurementDetailView.as_view()),
     path("goal/", views.GoalView.as_view()),
+    path("preferences/", views.PreferencesView.as_view()),
     path("stats/", views.StatsView.as_view()),
 ]

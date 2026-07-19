@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ActiveTimer, Measurement, Session, WeeklyGoal
+from .models import ActiveTimer, Measurement, Session, UserPreference, WeeklyGoal
 
 
 @admin.register(Session)
@@ -25,3 +25,8 @@ class MeasurementAdmin(admin.ModelAdmin):
 class WeeklyGoalAdmin(admin.ModelAdmin):
     list_display = ["user", "metric", "week_start", "minutes"]
     list_filter = ["metric", "user"]
+
+
+@admin.register(UserPreference)
+class UserPreferenceAdmin(admin.ModelAdmin):
+    list_display = ["user", "accent_color"]

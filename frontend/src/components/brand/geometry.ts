@@ -8,10 +8,10 @@ export const OHARA_LOGO_GEOMETRY = {
   rotationDegrees: -20,
 } as const
 
-// Flat equivalent of the reference image's soft-gradient green (its hue with
-// the perceived mid lightness). Standalone exports and the favicon use it;
+// Flat equivalent of the reference image's soft sky-blue (its hue with the
+// perceived mid lightness). Standalone exports and the favicon use it;
 // in-product renders use `currentColor` and take the app accent instead.
-export const OHARA_EMERALD = '#4FC580'
+export const OHARA_AZURE = '#57A9E5'
 
 export const OHARA_DARK = '#0B0F0D'
 export const OHARA_LIGHT = '#F5F5F5'

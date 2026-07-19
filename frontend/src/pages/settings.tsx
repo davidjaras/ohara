@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { KeyRound, LogOut } from 'lucide-react'
 import { api, logout } from '@/lib/api'
 import { LANGUAGES, setLanguage } from '@/lib/i18n'
+import { ACCENTS, setAccent, storedAccent } from '@/lib/theme'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -112,6 +114,79 @@ function LanguageCard() {
   )
 }
 
+function ThemeCard() {
+  const { t } = useTranslation()
+  const [selected, setSelected] = useState(storedAccent())
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.preferences.get().then(
+      (pref) => setSelected(pref.accent_color),
+      () => {},
+    )
+  }, [])
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setMessage(null)
+    setError(null)
+    api.preferences.set(selected).then(
+      (pref) => {
+        setSaving(false)
+        setAccent(pref.accent_color)
+        setMessage(t('settings.themeSaved'))
+      },
+      (err: Error) => {
+        setSaving(false)
+        setError(err.message)
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('settings.themeTitle')}</CardTitle>
+        <CardDescription>{t('settings.themeDescription')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <div className="flex flex-wrap gap-3">
+            {ACCENTS.map((accent) => {
+              const isSelected = selected === accent.code
+              return (
+                <button
+                  key={accent.code}
+                  type="button"
+                  onClick={() => setSelected(accent.code)}
+                  aria-label={t(accent.labelKey)}
+                  aria-pressed={isSelected}
+                  title={t(accent.labelKey)}
+                  className={cn(
+                    'size-10 rounded-full ring-offset-2 ring-offset-background transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isSelected ? 'ring-2 ring-ring scale-110' : 'hover:scale-105',
+                  )}
+                  style={{ background: accent.color }}
+                />
+              )
+            })}
+          </div>
+          {message && <p className="text-sm text-primary">{message}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div>
+            <Button type="submit" disabled={saving}>
+              {saving ? t('settings.saving') : t('settings.apply')}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 function AccountCard() {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
@@ -151,6 +226,7 @@ export function SettingsPage() {
     <div className="mx-auto grid max-w-xl gap-4 sm:gap-5">
       <GoalCard />
       <LanguageCard />
+      <ThemeCard />
       <AccountCard />
     </div>
   )

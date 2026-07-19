@@ -17,15 +17,14 @@ units of optical padding on every side.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Ohara emerald | `#4FC580` | Primary symbol color (standalone exports, favicon) |
+| Ohara azure | `#57A9E5` | Primary symbol color (standalone exports, favicon) |
 | Dark background | `#0B0F0D` | Canonical dark surface |
 | Light foreground | `#F5F5F5` | White mark on dark surfaces |
 
-Ohara emerald is the flat equivalent of the reference image's soft-gradient
-green: same hue, mid perceived lightness. (An earlier draft used `#22C55E`,
-which reads noticeably more saturated than the reference.)
+Ohara azure is the flat equivalent of the reference image's soft sky-blue:
+same hue, mid perceived lightness.
 
-Approved variants are emerald or white on the dark background, and emerald or
+Approved variants are azure or white on the dark background, and azure or
 near-black (`#0B0F0D`) on a light background. **In-product**, the symbol is
 rendered with `currentColor` taking the app's accent token (`--primary`), so
 the mark always matches the surrounding UI. Maintain sufficient contrast in
@@ -59,9 +58,9 @@ formalization.
 ## Files
 
 - `frontend/public/brand/ohara-symbol.svg`: canonical `currentColor` symbol.
-- `frontend/public/brand/ohara-symbol-emerald.svg`: emerald standalone export.
+- `frontend/public/brand/ohara-symbol-azure.svg`: azure standalone export.
 - `frontend/public/brand/ohara-symbol-white.svg`: light standalone export.
-- `frontend/public/favicon.svg`: small-size emerald browser icon on the flat
+- `frontend/public/favicon.svg`: small-size azure browser icon on the flat
   dark application tile.
 - `frontend/src/components/brand/geometry.ts`: shared canonical geometry and color values.
 - `frontend/src/components/brand/OharaLogo.tsx`: reusable React component.
@@ -81,5 +80,5 @@ technology.
 ```tsx
 import { OharaLogo } from '@/components/brand/OharaLogo'
 
-<OharaLogo size={32} className="text-[#22C55E]" title="Ohara" />
+<OharaLogo size={32} className="text-[#57A9E5]" title="Ohara" />
 ```
