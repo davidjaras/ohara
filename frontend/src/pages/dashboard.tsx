@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CalendarCheck, Clock, Flame } from 'lucide-react'
 import { api, type Stats } from '@/lib/api'
 import { formatMinutes } from '@/lib/format'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CumulativeWeekChart, WeeklyChart } from '@/components/charts'
 import { RangeSelect } from '@/components/range-select'
-import { StatCard } from '@/components/stat-card'
+import { useLayoutContext } from '@/components/layout'
 import { TimerCard } from '@/components/timer-card'
 import { WeekList } from '@/components/week-list'
 
@@ -18,6 +17,7 @@ const WEEK_RANGES = [4, 12, 26, 52]
 
 export function DashboardPage() {
   const { t } = useTranslation()
+  const { refreshStreak } = useLayoutContext()
   const [stats, setStats] = useState<Stats | null>(null)
   const [weeks, setWeeks] = useState(12)
   const [error, setError] = useState<string | null>(null)
@@ -27,6 +27,13 @@ export function DashboardPage() {
   }, [weeks])
 
   useEffect(loadStats, [loadStats])
+
+  // A finished session can push the week over its goal, changing the streak
+  // shown in the navbar — refresh both the page stats and that badge.
+  const handleSessionSaved = useCallback(() => {
+    loadStats()
+    refreshStreak()
+  }, [loadStats, refreshStreak])
 
   if (error) {
     return <p className="py-10 text-center text-sm text-destructive">{error}</p>
@@ -38,30 +45,7 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-4 sm:gap-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-        <StatCard
-          icon={Flame}
-          label={t('stats.streak')}
-          value={stats?.streak_weeks ?? '–'}
-          unit={(stats?.streak_weeks === 1 ? t('stats.week') : t('stats.weeks')).toLowerCase()}
-          highlight={Boolean(stats && stats.streak_weeks > 0)}
-        />
-        <StatCard
-          icon={CalendarCheck}
-          label={t('stats.thisWeek')}
-          value={stats?.week_minutes ?? '–'}
-          unit={stats ? `/ ${stats.week_goal_minutes} ${t('stats.min')}` : undefined}
-          highlight={stats?.week_met}
-        />
-        <StatCard
-          icon={Clock}
-          label={t('stats.total')}
-          value={stats?.total_minutes ?? '–'}
-          unit={t('stats.min')}
-        />
-      </div>
-
-      <TimerCard metric={METRIC} onSessionSaved={loadStats} />
+      <TimerCard metric={METRIC} onSessionSaved={handleSessionSaved} />
 
       {stats && (
         <>

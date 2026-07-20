@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useLayoutContext } from '@/components/layout'
 
 const METRIC = 'estudio'
 
@@ -155,6 +156,7 @@ function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: 
 
 export function HistoryPage() {
   const { t } = useTranslation()
+  const { refreshStreak } = useLayoutContext()
   const [sessions, setSessions] = useState<Session[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -164,9 +166,16 @@ export function HistoryPage() {
 
   useEffect(load, [load])
 
+  // Adding or removing a session can change which weeks met their goal, so
+  // reload the list and refresh the navbar streak together.
+  const reload = useCallback(() => {
+    load()
+    refreshStreak()
+  }, [load, refreshStreak])
+
   return (
     <div className="grid gap-4 sm:gap-5">
-      <ManualEntryForm onSaved={load} />
+      <ManualEntryForm onSaved={reload} />
       <Card>
         <CardHeader>
           <CardTitle>{t('history.sessionsTitle')}</CardTitle>
@@ -176,7 +185,7 @@ export function HistoryPage() {
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : (
-            <SessionList sessions={sessions} onDeleted={load} />
+            <SessionList sessions={sessions} onDeleted={reload} />
           )}
         </CardContent>
       </Card>
