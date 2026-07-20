@@ -19,9 +19,6 @@ const es = {
     streak: 'Racha',
     week: 'Semana',
     weeks: 'Semanas',
-    thisWeek: 'Esta semana',
-    total: 'Total',
-    min: 'min',
   },
   timer: {
     start: 'Iniciar sesión de estudio',
@@ -156,9 +153,6 @@ const en: typeof es = {
     streak: 'Streak',
     week: 'Week',
     weeks: 'Weeks',
-    thisWeek: 'This week',
-    total: 'Total',
-    min: 'min',
   },
   timer: {
     start: 'Start study session',

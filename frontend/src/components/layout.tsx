@@ -1,11 +1,23 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { NavLink, Outlet, useOutletContext } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { History, LayoutDashboard, Scale, Settings } from 'lucide-react'
-import { api } from '@/lib/api'
+import { Flame, History, LayoutDashboard, Scale, Settings } from 'lucide-react'
+import { api, type Stats } from '@/lib/api'
 import { setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { OharaLogo } from '@/components/brand/OharaLogo'
+
+const METRIC = 'estudio'
+
+/** Handles the Layout shares with its routed pages through <Outlet>. */
+export interface LayoutContext {
+  /** Re-read the navbar streak after a session is saved or deleted. */
+  refreshStreak: () => void
+}
+
+export function useLayoutContext() {
+  return useOutletContext<LayoutContext>()
+}
 
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
@@ -70,16 +82,25 @@ function MobileTabBar() {
 }
 
 export function Layout() {
+  const { t } = useTranslation()
   const [username, setUsername] = useState('')
+  const [streakWeeks, setStreakWeeks] = useState<number | null>(null)
+
+  const refreshStreak = useCallback(() => {
+    // weeks=1 keeps the payload minimal; the streak is computed independently
+    // of the range (the backend walks every recorded week for it).
+    api.stats(METRIC, 1).then((s: Stats) => setStreakWeeks(s.streak_weeks), () => {})
+  }, [])
 
   useEffect(() => {
     api.me().then((me) => setUsername(me.username), () => {})
+    refreshStreak()
     // Reconcile the accent with the server value (localStorage was already
     // applied synchronously at startup, so this only corrects a stale cache).
     api.preferences.get().then((pref) => {
       if (pref.accent_color !== storedAccent()) setAccent(pref.accent_color)
     }, () => {})
-  }, [])
+  }, [refreshStreak])
 
   return (
     <div className="min-h-svh">
@@ -91,14 +112,23 @@ export function Layout() {
           </NavLink>
           <div className="flex items-center gap-2">
             <DesktopNav />
-            <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
+            {streakWeeks !== null && (
+              <span
+                className="ml-2 flex items-center gap-1 text-sm text-muted-foreground"
+                title={t('stats.streak')}
+              >
+                <Flame className={streakWeeks > 0 ? 'size-4 text-primary' : 'size-4'} />
+                {streakWeeks}
+              </span>
+            )}
+            <span className="hidden text-sm text-muted-foreground sm:inline">
               {username}
             </span>
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:pb-10">
-        <Outlet />
+        <Outlet context={{ refreshStreak } satisfies LayoutContext} />
       </main>
       <MobileTabBar />
     </div>
