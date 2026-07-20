@@ -17,12 +17,21 @@ units of optical padding on every side.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Ohara azure | `#57A9E5` | Primary symbol color (standalone exports, favicon) |
+| Ohara azure | `#57A9E5` | Primary symbol color (standalone exports) |
+| Azure gradient light | `#7CC0F0` | Favicon/app-tile ring gradient, upper-left stop |
+| Azure gradient dark | `#3E86C7` | Favicon/app-tile ring gradient, lower-right stop |
 | Dark background | `#0B0F0D` | Canonical dark surface |
+| Tile gradient light | `#121815` | Favicon/app-tile background gradient, upper-left stop |
+| Tile gradient dark | `#050807` | Favicon/app-tile background gradient, lower-right stop |
 | Light foreground | `#F5F5F5` | White mark on dark surfaces |
 
 Ohara azure is the flat equivalent of the reference image's soft sky-blue:
-same hue, mid perceived lightness.
+same hue, mid perceived lightness. The favicon/app-tile exports render the
+ring with a diagonal gradient between the two azure gradient stops (midpoint
+≈ Ohara azure) plus a subtle drop shadow, echoing the soft depth of the
+reference image; everywhere else the symbol stays flat. The tile behind it
+uses its own near-imperceptible diagonal gradient between the two tile
+stops (midpoint ≈ the dark background) instead of a flat fill.
 
 Approved variants are azure or white on the dark background, and azure or
 near-black (`#0B0F0D`) on a light background. **In-product**, the symbol is
@@ -47,7 +56,9 @@ favicon at browser-icon sizes and do not reduce the stroke weight.
   area around 1:30 and must not be rotated to the top.
 - Do not change the stroke width or replace the rounded endpoints.
 - Do not add gradients, shadows, glow, textures, internal marks, or enclosing
-  shapes.
+  shapes — with one exception: the favicon/app-tile exports use the documented
+  azure ring gradient and a subtle drop shadow over the documented tile
+  background gradient.
 - Do not place a checkmark, letter, or illustrative object inside the symbol.
 - Do not use unapproved colors or place the mark on a low-contrast background.
 
@@ -60,14 +71,23 @@ formalization.
 - `frontend/public/brand/ohara-symbol.svg`: canonical `currentColor` symbol.
 - `frontend/public/brand/ohara-symbol-azure.svg`: azure standalone export.
 - `frontend/public/brand/ohara-symbol-white.svg`: light standalone export.
-- `frontend/public/favicon.svg`: small-size azure browser icon on the flat
-  dark application tile.
+- `frontend/public/favicon.svg`: browser icon — gradient ring with drop
+  shadow on the dark application tile.
+- `frontend/public/favicon.ico`: multi-resolution (16/32/48) raster fallback,
+  same artwork; browsers request `/favicon.ico` automatically.
+- `frontend/public/apple-touch-icon.png`: 1024 × 1024 iOS home-screen icon,
+  full-bleed opaque tile-gradient background (no transparency — iOS would
+  fill it with black), no pre-rounded corners (iOS applies its own mask).
 - `frontend/src/components/brand/geometry.ts`: shared canonical geometry and color values.
 - `frontend/src/components/brand/OharaLogo.tsx`: reusable React component.
 - `frontend/src/pages/BrandPreview.tsx`: internal geometry, scale, and color
   review page.
 
-Raster, ICO, PWA, social, and Open Graph exports are deliberately deferred.
+PWA, social, and Open Graph exports are deliberately deferred. The raster
+exports (`favicon.ico`, `apple-touch-icon.png`) are generated from
+`favicon.svg`; when regenerating, replace `pathLength`-normalized dash values
+with real-unit ones first — librsvg-based rasterizers ignore `pathLength` and
+would render the ring closed.
 
 ## React usage
 
