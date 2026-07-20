@@ -166,3 +166,29 @@
     @apply font-sans;
     }
 }
+/* Native date inputs (Registro manual, Peso). Two browser quirks:
+   - Chrome's calendar indicator is a near-black glyph that vanishes on the
+     dark theme; invert it there (scoped to .dark so a future light theme
+     keeps the default).
+   - iOS Safari sizes/centers the field by its own rules and can overflow
+     the row; dropping the native appearance and left-aligning the value
+     makes it behave like every other text input. */
+@layer base {
+  input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+  .dark input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
