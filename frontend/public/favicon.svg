@@ -4,11 +4,15 @@
       <stop offset="0" stop-color="#7CC0F0" />
       <stop offset="1" stop-color="#3E86C7" />
     </linearGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#121815" />
+      <stop offset="1" stop-color="#050807" />
+    </linearGradient>
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#000000" flood-opacity="0.35" />
     </filter>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#0B0F0D" />
+  <rect width="64" height="64" rx="14" fill="url(#tile)" />
   <g filter="url(#shadow)">
     <circle
       cx="32"
