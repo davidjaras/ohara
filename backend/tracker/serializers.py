@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from .models import Measurement, Session
@@ -28,8 +29,25 @@ class SessionSerializer(serializers.ModelSerializer):
 class ManualSessionInputSerializer(serializers.Serializer):
     metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
     date = serializers.DateField()
-    minutes = serializers.IntegerField(min_value=1)
+    minutes = serializers.IntegerField(min_value=1, max_value=settings.MAX_DAY_MINUTES)
     note = serializers.CharField(allow_blank=True, default="", trim_whitespace=False)
+
+
+class SessionUpdateInputSerializer(serializers.Serializer):
+    """Partial edit of an existing session: only the given fields change."""
+
+    date = serializers.DateField(required=False)
+    minutes = serializers.IntegerField(
+        min_value=1, max_value=settings.MAX_DAY_MINUTES, required=False
+    )
+    note = serializers.CharField(
+        allow_blank=True, required=False, trim_whitespace=False
+    )
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError(_("Nothing to update."))
+        return attrs
 
 
 class MeasurementSerializer(serializers.ModelSerializer):
@@ -47,7 +65,7 @@ class MeasurementInputSerializer(serializers.Serializer):
 
 class GoalInputSerializer(serializers.Serializer):
     metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
-    minutes = serializers.IntegerField(min_value=1)
+    minutes = serializers.IntegerField(min_value=1, max_value=settings.MAX_WEEK_MINUTES)
 
 
 class FinishTimerSerializer(serializers.Serializer):

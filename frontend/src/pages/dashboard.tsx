@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Stats } from '@/lib/api'
+import { METRIC_ESTUDIO } from '@/lib/constants'
 import { formatMinutes } from '@/lib/format'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CumulativeWeekChart, WeeklyChart } from '@/components/charts'
@@ -8,8 +9,6 @@ import { RangeSelect } from '@/components/range-select'
 import { useLayoutContext } from '@/components/layout'
 import { TimerCard } from '@/components/timer-card'
 import { WeekList } from '@/components/week-list'
-
-const METRIC = 'estudio'
 
 // 12 weeks (a quarter) reads at a glance; 4 zooms into the current month and
 // 26/52 give the half-year and full-year picture.
@@ -23,7 +22,7 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   const loadStats = useCallback(() => {
-    api.stats(METRIC, weeks).then(setStats, (e: Error) => setError(e.message))
+    api.stats(METRIC_ESTUDIO, weeks).then(setStats, (e: Error) => setError(e.message))
   }, [weeks])
 
   useEffect(loadStats, [loadStats])
@@ -45,7 +44,7 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-4 sm:gap-5">
-      <TimerCard metric={METRIC} onSessionSaved={handleSessionSaved} />
+      <TimerCard metric={METRIC_ESTUDIO} onSessionSaved={handleSessionSaved} />
 
       {stats && (
         <>

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-17 17:19-0500\n"
+"POT-Creation-Date: 2026-07-30 17:21-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,6 +16,15 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: templates/admin/base_site.html:7
+msgid "Django site admin"
+msgstr "Administración del sitio"
+
+#: templates/admin/base_site.html:12
+msgid "Django administration"
+msgstr "Administración de Django"
+
 #: templates/registration/login.html:3 templates/registration/login.html:5
 #: templates/registration/login.html:17
 #: templates/registration/password_reset_complete.html:7
@@ -105,7 +114,9 @@ msgstr "Email enviado"
 msgid ""
 "If that email exists in the system, you will receive a link to reset your "
 "password. In development the email is printed to the server console."
-msgstr "Si ese email existe en el sistema, vas a recibir un enlace para restablecer tu contraseña. En desarrollo el email se imprime en la consola del servidor."
+msgstr ""
+"Si ese email existe en el sistema, vas a recibir un enlace para restablecer "
+"tu contraseña. En desarrollo el email se imprime en la consola del servidor."
 
 #: templates/registration/password_reset_done.html:7
 #: templates/registration/password_reset_form.html:12
@@ -119,7 +130,8 @@ msgstr "Restablecer contraseña"
 
 #: templates/registration/password_reset_form.html:6
 msgid "Enter your email and we will send you a link to set a new password."
-msgstr "Ingresá tu email y te enviamos un enlace para definir una contraseña nueva."
+msgstr ""
+"Ingresá tu email y te enviamos un enlace para definir una contraseña nueva."
 
 #: templates/registration/password_reset_form.html:10
 msgid "Send link"
@@ -140,42 +152,65 @@ msgstr "La métrica %s no es de tipo sesión"
 msgid "Metric %s is not a measurement metric"
 msgstr "La métrica %s no es de tipo medición"
 
-#: tracker/services.py:41
+#: tracker/serializers.py:49
+msgid "Nothing to update."
+msgstr "No hay nada para actualizar."
+
+#: tracker/services.py:57
 msgid "There is already a session in progress for this metric."
 msgstr "Ya hay una sesión en curso para esta métrica."
 
-#: tracker/services.py:51
+#: tracker/services.py:67
 msgid "There is no session in progress."
 msgstr "No hay ninguna sesión en curso."
 
-#: tracker/services.py:57
+#: tracker/services.py:73
 msgid "The session is already paused."
 msgstr "La sesión ya está en pausa."
 
-#: tracker/services.py:67
+#: tracker/services.py:83
 msgid "The session is not paused."
 msgstr "La sesión no está en pausa."
 
-#: tracker/services.py:99
+#: tracker/services.py:203
 msgid "Minutes must be greater than zero."
 msgstr "Los minutos deben ser mayores a cero."
 
-#: tracker/services.py:123
-msgid "The goal must be greater than zero."
-msgstr "La meta debe ser mayor a cero."
+#: tracker/services.py:206
+#, python-format
+msgid "A session cannot be longer than a day (%(max)d minutes)."
+msgstr "Una sesión no puede durar más de un día (%(max)d minutos)."
 
-#: tracker/views.py:80
-msgid "Invalid action."
-msgstr "Acción inválida."
+#: tracker/services.py:209 tracker/services.py:420
+msgid "The date cannot be in the future."
+msgstr "La fecha no puede estar en el futuro."
 
-#: tracker/views.py:131
+#: tracker/services.py:214
+#, python-format
+msgid "That day already has %(used)s logged; only %(free)s more fit."
+msgstr "Ese día ya tiene %(used)s registrados; solo caben %(free)s más."
+
+#: tracker/services.py:248 tracker/views.py:157
 msgid "No such session."
 msgstr "No existe esa sesión."
 
-#: tracker/views.py:139
+#: tracker/services.py:285
+msgid "The goal must be greater than zero."
+msgstr "La meta debe ser mayor a cero."
+
+#: tracker/services.py:288
+#, python-format
+msgid "The goal cannot exceed the %(max)d minutes a week has."
+msgstr "La meta no puede superar los %(max)d minutos que tiene una semana."
+
+#: tracker/views.py:82
+msgid "Invalid action."
+msgstr "Acción inválida."
+
+#: tracker/views.py:165
 msgid "Missing metric parameter."
 msgstr "Falta el parámetro metric."
 
-#: tracker/views.py:161
+#: tracker/views.py:192
 msgid "No such measurement."
 msgstr "No existe esa medición."

@@ -31,6 +31,10 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
   const [finishOpen, setFinishOpen] = useState(false)
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  // Whether *we* paused the clock to open the finish dialog: only then does
+  // cancelling resume it. A timer you had already paused stays paused.
+  const [pausedForFinish, setPausedForFinish] = useState(false)
+  const [pausing, setPausing] = useState(false)
 
   const applyState = useCallback((state: TimerState) => {
     fetchedAtRef.current = performance.now()
@@ -60,12 +64,41 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
     action().then(applyState, (e: Error) => setError(e.message))
   }
 
+  // The time spent writing the note is not study time, so the clock stops
+  // while the dialog is open. The pause is real (not just visual): that is
+  // what makes `finish` record the right duration, and closing the tab
+  // mid-note leaves the timer paused, which is the honest state.
+  const openFinish = () => {
+    setFinishOpen(true)
+    if (!running) return
+    setPausing(true)
+    api.timer.pause(metric).then(
+      (state) => {
+        setPausing(false)
+        setPausedForFinish(true)
+        applyState(state)
+      },
+      (e: Error) => {
+        setPausing(false)
+        setError(e.message)
+      },
+    )
+  }
+
+  const closeFinish = () => {
+    setFinishOpen(false)
+    if (!pausedForFinish) return
+    setPausedForFinish(false)
+    act(() => api.timer.resume(metric))
+  }
+
   const handleFinish = () => {
     setSaving(true)
     api.timer.finish(metric, note.trim()).then(
       () => {
         setSaving(false)
         setFinishOpen(false)
+        setPausedForFinish(false)
         setNote('')
         setTimer({ active: false })
         onSessionSaved()
@@ -137,7 +170,7 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
                   {t('timer.pause')}
                 </Button>
               )}
-              <Button size="lg" onClick={() => setFinishOpen(true)}>
+              <Button size="lg" onClick={openFinish}>
                 <Square className="size-4" />
                 {t('timer.finish')}
               </Button>
@@ -156,7 +189,7 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
         {error && <p className="mt-3 text-center text-sm text-destructive">{error}</p>}
       </CardContent>
 
-      <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
+      <Dialog open={finishOpen} onOpenChange={(open) => !open && closeFinish()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('timer.finishTitle')}</DialogTitle>
@@ -177,10 +210,10 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
             <p className="text-sm text-muted-foreground">{t('timer.noteHint')}</p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setFinishOpen(false)} disabled={saving}>
+            <Button variant="ghost" onClick={closeFinish} disabled={saving}>
               {t('timer.cancel')}
             </Button>
-            <Button onClick={handleFinish} disabled={saving}>
+            <Button onClick={handleFinish} disabled={saving || pausing}>
               {saving ? t('timer.saving') : t('timer.save')}
             </Button>
           </DialogFooter>

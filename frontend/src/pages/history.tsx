@@ -1,36 +1,116 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Timer, Trash2 } from 'lucide-react'
+import { Pencil, Timer, Trash2 } from 'lucide-react'
 import { api, type Session } from '@/lib/api'
+import { MAX_DAY_MINUTES, METRIC_ESTUDIO } from '@/lib/constants'
 import { formatLongDate, formatMinutes, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useLayoutContext } from '@/components/layout'
 
-const METRIC = 'estudio'
+type EntryDraft = { date: string; minutes: string; note: string }
+
+/** Local check mirroring the backend guards, so typos never need a round trip. */
+function minutesError(minutes: string): 'notWhole' | 'tooLong' | null {
+  const value = Number(minutes)
+  if (!Number.isInteger(value)) return 'notWhole'
+  if (value < 1 || value > MAX_DAY_MINUTES) return 'tooLong'
+  return null
+}
+
+/** The date/minutes/note fields, shared by the entry form and the edit dialog. */
+function EntryFields({
+  idPrefix,
+  draft,
+  onChange,
+}: {
+  idPrefix: string
+  draft: EntryDraft
+  onChange: (draft: EntryDraft) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-date`}>{t('history.date')}</Label>
+          <Input
+            id={`${idPrefix}-date`}
+            type="date"
+            value={draft.date}
+            max={todayISO()}
+            onChange={(e) => onChange({ ...draft, date: e.target.value })}
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-minutes`}>{t('history.minutes')}</Label>
+          <Input
+            id={`${idPrefix}-minutes`}
+            type="number"
+            min={1}
+            max={MAX_DAY_MINUTES}
+            step={1}
+            placeholder="90"
+            value={draft.minutes}
+            onChange={(e) => onChange({ ...draft, minutes: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-note`}>{t('history.note')}</Label>
+        <Textarea
+          id={`${idPrefix}-note`}
+          value={draft.note}
+          onChange={(e) => onChange({ ...draft, note: e.target.value })}
+          placeholder={t('timer.noteLabel')}
+          rows={3}
+        />
+        <p className="text-sm text-muted-foreground">{t('history.noteHint')}</p>
+      </div>
+    </>
+  )
+}
 
 function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
   const { t } = useTranslation()
-  const [date, setDate] = useState(todayISO())
-  const [minutes, setMinutes] = useState('')
-  const [note, setNote] = useState('')
+  const [draft, setDraft] = useState<EntryDraft>({ date: todayISO(), minutes: '', note: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
+    const invalid = minutesError(draft.minutes)
+    if (invalid) {
+      setError(t(`history.${invalid}`, { max: MAX_DAY_MINUTES }))
+      return
+    }
     setSaving(true)
     setError(null)
     api.sessions
-      .create({ metric: METRIC, date, minutes: Number(minutes), note: note.trim() })
+      .create({
+        metric: METRIC_ESTUDIO,
+        date: draft.date,
+        minutes: Number(draft.minutes),
+        note: draft.note.trim(),
+      })
       .then(
         () => {
           setSaving(false)
-          setMinutes('')
-          setNote('')
+          setDraft({ ...draft, minutes: '', note: '' })
           onSaved()
         },
         (err: Error) => {
@@ -48,45 +128,10 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="entry-date">{t('history.date')}</Label>
-              <Input
-                id="entry-date"
-                type="date"
-                value={date}
-                max={todayISO()}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="entry-minutes">{t('history.minutes')}</Label>
-              <Input
-                id="entry-minutes"
-                type="number"
-                min={1}
-                placeholder="90"
-                value={minutes}
-                onChange={(e) => setMinutes(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="entry-note">{t('history.note')}</Label>
-            <Textarea
-              id="entry-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={t('timer.noteLabel')}
-              rows={3}
-            />
-            <p className="text-sm text-muted-foreground">{t('history.noteHint')}</p>
-          </div>
+          <EntryFields idPrefix="entry" draft={draft} onChange={setDraft} />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div>
-            <Button type="submit" disabled={saving || !minutes}>
+            <Button type="submit" disabled={saving || !draft.minutes}>
               {saving ? t('history.saving') : t('history.save')}
             </Button>
           </div>
@@ -96,7 +141,91 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
   )
 }
 
-function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: () => void }) {
+function EditEntryDialog({
+  session,
+  onClose,
+  onSaved,
+}: {
+  session: Session | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState<EntryDraft>({ date: '', minutes: '', note: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!session) return
+    setDraft({
+      date: session.date,
+      minutes: String(session.minutes),
+      note: session.note,
+    })
+    setError(null)
+  }, [session])
+
+  const handleSave = () => {
+    if (!session) return
+    const invalid = minutesError(draft.minutes)
+    if (invalid) {
+      setError(t(`history.${invalid}`, { max: MAX_DAY_MINUTES }))
+      return
+    }
+    setSaving(true)
+    setError(null)
+    api.sessions
+      .update(session.id, {
+        date: draft.date,
+        minutes: Number(draft.minutes),
+        note: draft.note.trim(),
+      })
+      .then(
+        () => {
+          setSaving(false)
+          onSaved()
+          onClose()
+        },
+        (err: Error) => {
+          setSaving(false)
+          setError(err.message)
+        },
+      )
+  }
+
+  return (
+    <Dialog open={session !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t('history.editTitle')}</DialogTitle>
+          <DialogDescription>{t('history.editDescription')}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <EntryFields idPrefix="edit" draft={draft} onChange={setDraft} />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            {t('history.cancel')}
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !draft.minutes}>
+            {saving ? t('history.saving') : t('history.save')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function SessionList({
+  sessions,
+  onEdit,
+  onDeleted,
+}: {
+  sessions: Session[]
+  onEdit: (session: Session) => void
+  onDeleted: () => void
+}) {
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
@@ -141,6 +270,15 @@ function SessionList({ sessions, onDeleted }: { sessions: Session[]; onDeleted: 
             <Button
               variant="ghost"
               size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => onEdit(session)}
+              aria-label={t('history.editLabel')}
+            >
+              <Pencil className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               className="text-muted-foreground hover:text-destructive"
               onClick={() => handleDelete(session)}
               aria-label={t('history.deleteLabel')}
@@ -158,16 +296,17 @@ export function HistoryPage() {
   const { t } = useTranslation()
   const { refreshStreak } = useLayoutContext()
   const [sessions, setSessions] = useState<Session[]>([])
+  const [editing, setEditing] = useState<Session | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    api.sessions.list(METRIC).then(setSessions, (e: Error) => setError(e.message))
+    api.sessions.list(METRIC_ESTUDIO).then(setSessions, (e: Error) => setError(e.message))
   }, [])
 
   useEffect(load, [load])
 
-  // Adding or removing a session can change which weeks met their goal, so
-  // reload the list and refresh the navbar streak together.
+  // Adding, editing or removing a session can change which weeks met their
+  // goal, so reload the list and refresh the navbar streak together.
   const reload = useCallback(() => {
     load()
     refreshStreak()
@@ -185,10 +324,11 @@ export function HistoryPage() {
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : (
-            <SessionList sessions={sessions} onDeleted={reload} />
+            <SessionList sessions={sessions} onEdit={setEditing} onDeleted={reload} />
           )}
         </CardContent>
       </Card>
+      <EditEntryDialog session={editing} onClose={() => setEditing(null)} onSaved={reload} />
     </div>
   )
 }

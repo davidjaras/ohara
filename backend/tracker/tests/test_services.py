@@ -22,7 +22,8 @@ MONDAY = date(2026, 7, 6)
 
 
 def log(user, day: date, minutes: int, metric: str = "estudio") -> Session:
-    return services.log_manual_session(user, metric, day, minutes)
+    # `day` doubles as "today": logging on the day itself is always in the past.
+    return services.log_manual_session(user, metric, day, minutes, day)
 
 
 # --- Weeks -----------------------------------------------------------------
@@ -64,12 +65,21 @@ class TestTimer:
         timer = services.pause_timer(user, "estudio", t0 + timedelta(minutes=5))
         assert timer.elapsed_seconds(t0 + timedelta(hours=3)) == 5 * 60
 
-    def test_session_attributed_to_start_day_across_midnight(self, user, settings):
+    def test_session_row_is_dated_by_its_start_day(self, user, settings):
+        # The row keeps the start day; the time itself is split across the days
+        # it spans when aggregating (see TestDaySegments).
         settings.TIME_ZONE = "UTC"
         t0 = dt(2026, 7, 6, 23, 30, 0)
         services.start_timer(user, "estudio", t0)
         session = services.finish_timer(user, "estudio", t0 + timedelta(hours=1))
         assert session.date == date(2026, 7, 6)
+
+    def test_forgotten_timer_is_clamped_to_a_full_day(self, user):
+        t0 = dt(2026, 7, 6, 10, 0, 0)
+        services.start_timer(user, "estudio", t0)
+        session = services.finish_timer(user, "estudio", t0 + timedelta(days=3))
+        assert session.duration_seconds == 24 * 60 * 60
+        assert session.ended_at == t0 + timedelta(days=1)
 
     def test_cannot_start_twice(self, user):
         services.start_timer(user, "estudio", dt(2026, 7, 6, 10, 0))
@@ -110,6 +120,65 @@ class TestTimer:
             services.start_timer(user, "inventada", dt(2026, 7, 6, 10, 0))
 
 
+# --- Day attribution ---------------------------------------------------------
+
+@pytest.fixture
+def utc(settings):
+    """Pin the local timezone so midnight is at a known instant."""
+    settings.TIME_ZONE = "UTC"
+
+
+def timed(user, start: datetime, end: datetime, seconds: int | None = None) -> Session:
+    """A timed session; `seconds` defaults to the whole wall-clock span."""
+    return Session.objects.create(
+        user=user,
+        metric="estudio",
+        date=services.local_date(start),
+        duration_seconds=seconds if seconds is not None else int((end - start).total_seconds()),
+        started_at=start,
+        ended_at=end,
+    )
+
+
+class TestDaySegments:
+    def test_manual_entry_lands_entirely_on_its_date(self, user):
+        session = log(user, MONDAY, 45)
+        assert services.day_segments(session) == [(MONDAY, 45 * 60)]
+
+    def test_session_within_one_day_is_not_split(self, user, utc):
+        session = timed(user, dt(2026, 7, 6, 10, 0), dt(2026, 7, 6, 11, 0))
+        assert services.day_segments(session) == [(MONDAY, 3600)]
+
+    def test_session_across_midnight_is_split_by_day(self, user, utc):
+        session = timed(user, dt(2026, 7, 6, 23, 30), dt(2026, 7, 7, 0, 30))
+        assert services.day_segments(session) == [
+            (MONDAY, 30 * 60),
+            (MONDAY + timedelta(days=1), 30 * 60),
+        ]
+
+    def test_pauses_are_spread_proportionally(self, user, utc):
+        # 23:00 -> 01:00 of wall clock, but only 60 min actually counted.
+        session = timed(user, dt(2026, 7, 6, 23, 0), dt(2026, 7, 7, 1, 0), seconds=60 * 60)
+        assert services.day_segments(session) == [
+            (MONDAY, 30 * 60),
+            (MONDAY + timedelta(days=1), 30 * 60),
+        ]
+
+    def test_segments_always_add_up_to_the_duration(self, user, utc):
+        # An odd duration forces rounding: the remainder goes to the last day.
+        session = timed(user, dt(2026, 7, 6, 23, 0), dt(2026, 7, 7, 2, 0), seconds=3601)
+        segments = services.day_segments(session)
+        assert sum(seconds for _day, seconds in segments) == 3601
+
+    def test_multi_day_session_covers_every_day(self, user, utc):
+        session = timed(user, dt(2026, 7, 6, 12, 0), dt(2026, 7, 8, 12, 0))
+        assert [day for day, _seconds in services.day_segments(session)] == [
+            MONDAY,
+            MONDAY + timedelta(days=1),
+            MONDAY + timedelta(days=2),
+        ]
+
+
 # --- Manual entry ---------------------------------------------------------
 
 class TestManualLog:
@@ -120,7 +189,66 @@ class TestManualLog:
 
     def test_rejects_non_positive_minutes(self, user):
         with pytest.raises(ValueError):
-            services.log_manual_session(user, "estudio", MONDAY, 0)
+            services.log_manual_session(user, "estudio", MONDAY, 0, MONDAY)
+
+    def test_rejects_more_minutes_than_a_day_has(self, user):
+        with pytest.raises(ValueError):
+            services.log_manual_session(user, "estudio", MONDAY, 1441, MONDAY)
+
+    def test_rejects_future_date(self, user):
+        with pytest.raises(ValueError):
+            services.log_manual_session(user, "estudio", MONDAY + timedelta(days=1), 30, MONDAY)
+
+    def test_rejects_entry_that_overflows_the_day(self, user):
+        log(user, MONDAY, 1400)
+        with pytest.raises(ValueError):
+            services.log_manual_session(user, "estudio", MONDAY, 41, MONDAY)
+
+    def test_accepts_the_minutes_that_still_fit(self, user):
+        log(user, MONDAY, 1400)
+        assert log(user, MONDAY, 40).duration_seconds == 40 * 60
+
+    def test_day_total_counts_time_spilled_from_the_previous_day(self, user, utc):
+        timed(user, dt(2026, 7, 6, 23, 0), dt(2026, 7, 7, 23, 0))  # 23 h on Tuesday
+        tuesday = MONDAY + timedelta(days=1)
+        with pytest.raises(ValueError):
+            services.log_manual_session(user, "estudio", tuesday, 61, tuesday)
+
+
+class TestUpdateSession:
+    def test_edits_date_minutes_and_note(self, user):
+        session = log(user, MONDAY, 30)
+        updated = services.update_session(
+            user, session.pk, MONDAY, day=MONDAY, minutes=45, note="repaso"
+        )
+        assert updated.duration_seconds == 45 * 60
+        assert updated.note == "repaso"
+
+    def test_excludes_itself_from_the_day_total(self, user):
+        session = log(user, MONDAY, 1400)
+        assert services.update_session(user, session.pk, MONDAY, minutes=1440).duration_seconds
+
+    def test_still_rejects_overflowing_the_day(self, user):
+        log(user, MONDAY, 1000)
+        session = log(user, MONDAY, 400)
+        with pytest.raises(ValueError):
+            services.update_session(user, session.pk, MONDAY, minutes=441)
+
+    def test_retiming_a_timed_session_drops_its_timestamps(self, user, utc):
+        session = timed(user, dt(2026, 7, 6, 10, 0), dt(2026, 7, 6, 11, 0))
+        updated = services.update_session(user, session.pk, MONDAY, minutes=30)
+        assert updated.started_at is None and updated.ended_at is None
+
+    def test_editing_only_the_note_keeps_the_timestamps(self, user, utc):
+        session = timed(user, dt(2026, 7, 6, 10, 0), dt(2026, 7, 6, 11, 0))
+        updated = services.update_session(user, session.pk, MONDAY, note="cálculo")
+        assert updated.started_at is not None
+        assert updated.duration_seconds == 3600
+
+    def test_cannot_edit_another_users_session(self, user, other_user):
+        session = log(user, MONDAY, 30)
+        with pytest.raises(LookupError):
+            services.update_session(other_user, session.pk, MONDAY, minutes=10)
 
 
 # --- Daily aggregation -------------------------------------------------------
@@ -151,6 +279,18 @@ class TestDailyMinutes:
         log(user, MONDAY, 30)
         log(other_user, MONDAY, 200)
         result = services.daily_minutes(user, "estudio", MONDAY, MONDAY)
+        assert result[0]["minutes"] == 30
+
+    def test_session_across_midnight_counts_on_both_days(self, user, utc):
+        timed(user, dt(2026, 7, 6, 23, 30), dt(2026, 7, 7, 0, 30))
+        result = services.daily_minutes(user, "estudio", MONDAY, MONDAY + timedelta(days=1))
+        assert [r["minutes"] for r in result] == [30, 30]
+
+    def test_time_spilled_into_the_range_is_counted(self, user, utc):
+        # The session started the day before the range and reaches into it.
+        timed(user, dt(2026, 7, 6, 23, 30), dt(2026, 7, 7, 0, 30))
+        tuesday = MONDAY + timedelta(days=1)
+        result = services.daily_minutes(user, "estudio", tuesday, tuesday)
         assert result[0]["minutes"] == 30
 
 
@@ -217,6 +357,14 @@ class TestWeeklySummaries:
         )
         assert summary.minutes == 300
 
+    def test_session_from_sunday_into_monday_splits_across_weeks(self, user, utc):
+        sunday_night = dt(2026, 7, 12, 23, 30)  # Sunday of MONDAY's week
+        timed(user, sunday_night, sunday_night + timedelta(hours=1))
+        summaries = services.weekly_summaries(
+            user, "estudio", MONDAY + timedelta(weeks=1), weeks=2
+        )
+        assert [s.minutes for s in summaries] == [30, 30]
+
     def test_returns_requested_weeks_ascending_with_zeroes(self, user):
         log(user, MONDAY, 300)
         summaries = services.weekly_summaries(
@@ -252,6 +400,10 @@ class TestGoals:
         services.set_goal(user, "estudio", 300, today=MONDAY)
         metric = get_metric("estudio")
         assert services.goal_for_week(other_user, metric, MONDAY) == 270
+
+    def test_rejects_goal_beyond_the_minutes_a_week_has(self, user):
+        with pytest.raises(ValueError):
+            services.set_goal(user, "estudio", 10081, today=MONDAY)
 
     def test_past_week_evaluated_with_goal_of_that_time(self, user):
         log(user, MONDAY, 280)  # meets 270, would miss 300

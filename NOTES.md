@@ -99,6 +99,42 @@ entrada en `METRICS` — cero cambios de modelos, migraciones o vistas — más 
 página en el frontend y tests. El núcleo (timer, agregaciones, meta, racha) no
 se tocó, que era el criterio de que el diseño estaba bien.
 
-## Sesión que cruza medianoche
-Se atribuye al día local en que empezó (comportamiento Garmin). Simple y
-predecible; no se parte en dos.
+## Sesión que cruza medianoche: se parte por día
+Antes se atribuía entera al día en que empezó. Se cambió: una sesión de 23:30
+a 00:30 aporta 30 minutos a cada día. La fila sigue teniendo un solo `date`
+(el día de inicio, que ordena el historial); el reparto se calcula al agregar,
+en `services.day_segments`. Así no hay modelo nuevo, ni migración, y las
+sesiones ya guardadas quedan bien atribuidas retroactivamente porque ya tenían
+`started_at`/`ended_at`. También parte entre semanas la sesión que va de
+domingo a lunes.
+
+El costo es que `daily_minutes` y `_week_seconds` dejan de agregar en SQL y
+expanden segmentos en Python. A escala personal es irrelevante, y a cambio la
+agregación y la validación del tope diario comparten exactamente el mismo
+cálculo, así que nunca discrepan.
+
+**Reparto proporcional, no por reloj de pared.** `duration_seconds` excluye las
+pausas, así que no coincide con `ended_at - started_at` y no se puede rebanar
+el intervalo directamente. Cada día recibe su fracción del tiempo de pared, y
+el residuo del redondeo va al último día para que las partes sumen exacto.
+Dónde cayeron las pausas no se guarda; repartirlas parejo es la regla simple
+más justa.
+
+## Tope de 1440 minutos por día
+Un día no puede tener más minutos de los que tiene. `MAX_DAY_MINUTES` /
+`MAX_WEEK_MINUTES` viven en settings y se validan en el serializer (respuesta
+rápida) y en el servicio (la regla real): cada registro ≤ 1440 y la suma del
+día ≤ 1440, contando el tiempo que se derramó de una sesión del día anterior.
+Al editar, la propia fila se excluye del total usado.
+
+Límite conocido: el tope por día se valida en las escrituras manuales. Una
+sesión cronometrada podría, combinada con registros manuales del mismo día,
+pasarse. Rechazarla al finalizar significaría tirar tiempo real ya vivido, así
+que no se hace. Lo que sí se acota es el cronómetro olvidado: `finish_timer`
+recorta a 24 h desde el inicio en vez de escribir una sesión imposible.
+
+## Editar registros, no solo crear y borrar
+`PATCH /api/sessions/<id>/` con campos parciales. Reescribir la fecha o la
+duración de una sesión cronometrada vuelve mentira sus marcas de tiempo, así
+que se borran y la fila pasa a ser un registro manual corregido, que es lo que
+realmente es. Editar solo la nota las conserva.

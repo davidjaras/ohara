@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { KeyRound, LogOut } from 'lucide-react'
 import { api, logout } from '@/lib/api'
+import { MAX_WEEK_MINUTES, METRIC_ESTUDIO } from '@/lib/constants'
 import { LANGUAGES, setLanguage } from '@/lib/i18n'
 import { ACCENTS, setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -17,8 +18,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const METRIC = 'estudio'
-
 function GoalCard() {
   const { t } = useTranslation()
   const [minutes, setMinutes] = useState('')
@@ -27,7 +26,7 @@ function GoalCard() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.goal.get(METRIC).then(
+    api.goal.get(METRIC_ESTUDIO).then(
       (goal) => setMinutes(String(goal.minutes)),
       (e: Error) => setError(e.message),
     )
@@ -38,7 +37,7 @@ function GoalCard() {
     setSaving(true)
     setMessage(null)
     setError(null)
-    api.goal.set(METRIC, Number(minutes)).then(
+    api.goal.set(METRIC_ESTUDIO, Number(minutes)).then(
       (goal) => {
         setSaving(false)
         setMinutes(String(goal.minutes))
@@ -65,6 +64,8 @@ function GoalCard() {
               id="goal-minutes"
               type="number"
               min={1}
+              max={MAX_WEEK_MINUTES}
+              step={1}
               value={minutes}
               onChange={(e) => setMinutes(e.target.value)}
               required
