@@ -105,11 +105,55 @@ class TestManualEntry:
         r = client.post("/api/sessions/", {"date": "2026-07-06", "minutes": 0}, format="json")
         assert r.status_code == 400
 
+    def test_rejects_more_minutes_than_a_day_has(self, client):
+        r = client.post("/api/sessions/", {"date": "2026-07-06", "minutes": 1441}, format="json")
+        assert r.status_code == 400
+
+    def test_rejects_entry_that_overflows_the_day(self, client):
+        client.post("/api/sessions/", {"date": "2026-07-06", "minutes": 1400}, format="json")
+        r = client.post("/api/sessions/", {"date": "2026-07-06", "minutes": 41}, format="json")
+        assert r.status_code == 400
+        assert Session.objects.count() == 1
+
+    def test_rejects_future_date(self, client):
+        tomorrow = (timezone.localdate() + timedelta(days=1)).isoformat()
+        r = client.post("/api/sessions/", {"date": tomorrow, "minutes": 30}, format="json")
+        assert r.status_code == 400
+
     def test_delete(self, client):
         r = client.post("/api/sessions/", {"date": "2026-07-06", "minutes": 30}, format="json")
         pk = r.json()["id"]
         assert client.delete(f"/api/sessions/{pk}/").status_code == 204
         assert Session.objects.count() == 0
+
+
+class TestEditEntry:
+    def _create(self, client, minutes=30, day="2026-07-06"):
+        return client.post(
+            "/api/sessions/", {"date": day, "minutes": minutes}, format="json"
+        ).json()["id"]
+
+    def test_patch_updates_minutes_and_note(self, client):
+        pk = self._create(client)
+        r = client.patch(f"/api/sessions/{pk}/", {"minutes": 75, "note": "cálculo"}, format="json")
+        assert r.status_code == 200
+        assert r.json()["minutes"] == 75
+        assert r.json()["note"] == "cálculo"
+
+    def test_patch_rejects_empty_body(self, client):
+        pk = self._create(client)
+        assert client.patch(f"/api/sessions/{pk}/", {}, format="json").status_code == 400
+
+    def test_patch_rejects_overflowing_the_day(self, client):
+        self._create(client, minutes=1000)
+        pk = self._create(client, minutes=400)
+        r = client.patch(f"/api/sessions/{pk}/", {"minutes": 441}, format="json")
+        assert r.status_code == 400
+
+    def test_patch_of_another_users_session_is_404(self, client, other_client):
+        pk = self._create(client)
+        r = other_client.patch(f"/api/sessions/{pk}/", {"minutes": 10}, format="json")
+        assert r.status_code == 404
 
 
 class TestGoal:
@@ -118,6 +162,9 @@ class TestGoal:
         r = client.put("/api/goal/", {"minutes": 300}, format="json")
         assert r.status_code == 200
         assert client.get("/api/goal/").json()["minutes"] == 300
+
+    def test_rejects_goal_beyond_the_minutes_a_week_has(self, client):
+        assert client.put("/api/goal/", {"minutes": 99999}, format="json").status_code == 400
 
 
 class TestStats:

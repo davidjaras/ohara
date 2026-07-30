@@ -122,7 +122,7 @@ NOTES.md             # decisiones de diseño
 | POST | `/api/timer/{start,pause,resume}/` | Acciones del cronómetro |
 | POST | `/api/timer/finish/` | Finalizar y guardar sesión (con nota) |
 | GET/POST | `/api/sessions/` | Listar / registrar manualmente sesiones |
-| DELETE | `/api/sessions/<id>/` | Borrar sesión |
+| PATCH/DELETE | `/api/sessions/<id>/` | Editar / borrar sesión |
 | GET/POST | `/api/measurements/?metric=` | Mediciones (ej. peso) |
 | DELETE | `/api/measurements/<id>/` | Borrar medición |
 | GET/PUT | `/api/goal/?metric=` | Meta semanal (aplica desde la semana actual) |

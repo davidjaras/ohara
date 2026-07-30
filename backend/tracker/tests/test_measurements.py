@@ -14,7 +14,7 @@ pytestmark = pytest.mark.django_db
 class TestMeasurementServices:
     def test_log_measurement(self, user):
         row = services.log_measurement(
-            user, "peso", date(2026, 7, 6), Decimal("78.40"), "post vacaciones"
+            user, "peso", date(2026, 7, 6), Decimal("78.40"), date(2026, 7, 6), "post vacaciones"
         )
         assert row.value == Decimal("78.40")
         assert row.note == "post vacaciones"
@@ -22,18 +22,28 @@ class TestMeasurementServices:
 
     def test_rejects_session_metric(self, user):
         with pytest.raises(ValueError):
-            services.log_measurement(user, "estudio", date(2026, 7, 6), Decimal("78.40"))
+            services.log_measurement(
+                user, "estudio", date(2026, 7, 6), Decimal("78.40"), date(2026, 7, 6)
+            )
 
     def test_rejects_unknown_metric(self, user):
         with pytest.raises(ValueError):
-            services.log_measurement(user, "altura", date(2026, 7, 6), Decimal("1.80"))
+            services.log_measurement(
+                user, "altura", date(2026, 7, 6), Decimal("1.80"), date(2026, 7, 6)
+            )
+
+    def test_rejects_future_date(self, user):
+        with pytest.raises(ValueError):
+            services.log_measurement(
+                user, "peso", date(2026, 7, 7), Decimal("78.40"), date(2026, 7, 6)
+            )
 
     def test_session_kind_guards_reject_measurement_metric(self, user):
         now = datetime(2026, 7, 6, 10, 0, tzinfo=dt_timezone.utc)
         with pytest.raises(ValueError):
             services.start_timer(user, "peso", now)
         with pytest.raises(ValueError):
-            services.log_manual_session(user, "peso", date(2026, 7, 6), 30)
+            services.log_manual_session(user, "peso", date(2026, 7, 6), 30, date(2026, 7, 6))
         with pytest.raises(ValueError):
             services.set_goal(user, "peso", 100, date(2026, 7, 6))
 

@@ -123,6 +123,12 @@ DEFAULT_MEASUREMENT_LIMIT = 100
 DEFAULT_STATS_DAYS = 14
 DEFAULT_STATS_WEEKS = 12
 
+# Physical ceilings: a day has 1440 minutes and a week 7 times that. Sessions
+# are attributed to the day they actually happened (split at midnight), so no
+# day can legitimately hold more than this.
+MAX_DAY_MINUTES = 24 * 60
+MAX_WEEK_MINUTES = 7 * MAX_DAY_MINUTES
+
 METRICS = {
     "estudio": {
         "key": "estudio",

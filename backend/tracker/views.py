@@ -18,6 +18,7 @@ from .serializers import (
     MeasurementSerializer,
     PreferencesSerializer,
     SessionSerializer,
+    SessionUpdateInputSerializer,
     TimerActionSerializer,
 )
 
@@ -118,7 +119,12 @@ class SessionListView(APIView):
         data = serializer.validated_data
         try:
             session = services.log_manual_session(
-                request.user, data["metric"], data["date"], data["minutes"], data["note"]
+                request.user,
+                data["metric"],
+                data["date"],
+                data["minutes"],
+                timezone.localdate(),
+                data["note"],
             )
         except ValueError as e:
             return _error(str(e), status.HTTP_400_BAD_REQUEST)
@@ -126,6 +132,25 @@ class SessionListView(APIView):
 
 
 class SessionDetailView(APIView):
+    def patch(self, request, pk: int):
+        serializer = SessionUpdateInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            session = services.update_session(
+                request.user,
+                pk,
+                timezone.localdate(),
+                day=data.get("date"),
+                minutes=data.get("minutes"),
+                note=data.get("note"),
+            )
+        except LookupError as e:
+            return _error(str(e), status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return _error(str(e), status.HTTP_400_BAD_REQUEST)
+        return Response(SessionSerializer(session).data)
+
     def delete(self, request, pk: int):
         deleted, _count = Session.objects.filter(user=request.user, pk=pk).delete()
         if not deleted:
@@ -148,7 +173,12 @@ class MeasurementListView(APIView):
         data = serializer.validated_data
         try:
             row = services.log_measurement(
-                request.user, data["metric"], data["date"], data["value"], data["note"]
+                request.user,
+                data["metric"],
+                data["date"],
+                data["value"],
+                timezone.localdate(),
+                data["note"],
             )
         except ValueError as e:
             return _error(str(e), status.HTTP_400_BAD_REQUEST)

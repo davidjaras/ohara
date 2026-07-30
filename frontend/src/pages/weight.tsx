@@ -11,14 +11,13 @@ import {
   YAxis,
 } from 'recharts'
 import { api, type Measurement } from '@/lib/api'
+import { METRIC_PESO } from '@/lib/constants'
 import { formatLongDate, formatShortDate, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RangeSelect } from '@/components/range-select'
-
-const METRIC = 'peso'
 
 type WeightRange = '1m' | '3m' | '1y' | 'all'
 
@@ -110,7 +109,7 @@ function WeightForm({ onSaved }: { onSaved: () => void }) {
     e.preventDefault()
     setSaving(true)
     setError(null)
-    api.measurements.create({ metric: METRIC, date, value: Number(value), note: '' }).then(
+    api.measurements.create({ metric: METRIC_PESO, date, value: Number(value), note: '' }).then(
       () => {
         setSaving(false)
         setValue('')
@@ -176,7 +175,7 @@ export function WeightPage() {
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    api.measurements.list(METRIC).then(setRows, (e: Error) => setError(e.message))
+    api.measurements.list(METRIC_PESO).then(setRows, (e: Error) => setError(e.message))
   }, [])
 
   useEffect(load, [load])

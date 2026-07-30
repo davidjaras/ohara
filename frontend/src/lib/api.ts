@@ -162,6 +162,8 @@ export const api = {
       request<Session[]>(`/api/sessions/?metric=${metric}&limit=${limit}`),
     create: (data: { metric: string; date: string; minutes: number; note: string }) =>
       request<Session>('/api/sessions/', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: { date?: string; minutes?: number; note?: string }) =>
+      request<Session>(`/api/sessions/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: number) => request<void>(`/api/sessions/${id}/`, { method: 'DELETE' }),
   },
 
