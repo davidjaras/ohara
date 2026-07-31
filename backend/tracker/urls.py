@@ -8,6 +8,7 @@ urlpatterns = [
     path("timer/", views.TimerView.as_view()),
     path("timer/start/", views.TimerStartView.as_view()),
     path("timer/extend/", views.TimerExtendView.as_view()),
+    path("timer/checkin/", views.TimerCheckinView.as_view()),
     path("timer/finish/", views.TimerFinishView.as_view()),
     path("timer/<str:action>/", views.TimerActionView.as_view()),
     path("sessions/", views.SessionListView.as_view()),

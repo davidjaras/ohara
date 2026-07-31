@@ -42,6 +42,8 @@ def _timer_state(timer: ActiveTimer | None) -> dict:
         "elapsed_seconds": timer.elapsed_seconds(now),
         "planned_duration_seconds": timer.planned_duration_seconds,
         "grace_seconds": settings.TIMER_GRACE_SECONDS,
+        "reminder_interval_seconds": timer.reminder_interval_seconds,
+        "confirmed_seconds": timer.confirmed_seconds,
         "server_time": now,
     }
 
@@ -118,6 +120,23 @@ class TimerActionView(APIView):
             return _error(str(e), status.HTTP_409_CONFLICT)
         except ValueError as e:
             return _error(str(e), status.HTTP_400_BAD_REQUEST)
+        return Response(_timer_state(timer))
+
+
+class TimerCheckinView(APIView):
+    def post(self, request):
+        serializer = TimerActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        metric = serializer.validated_data["metric"]
+        now = timezone.now()
+        # A check-in that arrives after the deadline cannot revive the timer:
+        # the absent stretch would end up recorded as study time. Close first,
+        # 409, and let the client land on the review banner.
+        services.finalize_expired_timer(request.user, metric, now)
+        try:
+            timer = services.checkin_timer(request.user, metric, now)
+        except services.TimerError as e:
+            return _error(str(e), status.HTTP_409_CONFLICT)
         return Response(_timer_state(timer))
 
 
@@ -300,19 +319,27 @@ class GoalView(APIView):
 
 
 class PreferencesView(APIView):
-    """Per-user UI preferences (accent color of the theme)."""
+    """Per-user preferences (theme accent, open-session reminder)."""
+
+    fields = ["accent_color", "reminder_minutes"]
+
+    def _payload(self, pref: UserPreference) -> dict:
+        return {field: getattr(pref, field) for field in self.fields}
 
     def get(self, request):
         pref, _created = UserPreference.objects.get_or_create(user=request.user)
-        return Response({"accent_color": pref.accent_color})
+        return Response(self._payload(pref))
 
     def put(self, request):
         serializer = PreferencesSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         pref, _created = UserPreference.objects.get_or_create(user=request.user)
-        pref.accent_color = serializer.validated_data["accent_color"]
-        pref.save(update_fields=["accent_color"])
-        return Response({"accent_color": pref.accent_color})
+        changed = [f for f in self.fields if f in serializer.validated_data]
+        for field in changed:
+            setattr(pref, field, serializer.validated_data[field])
+        if changed:
+            pref.save(update_fields=changed)
+        return Response(self._payload(pref))
 
 
 class StatsView(APIView):

@@ -14,3 +14,8 @@ export const PLANNED_PRESET_MINUTES = [25, 50, 90]
 export const DEFAULT_PLANNED_MINUTES = 50
 /** Minutes each extension adds when a planned session runs out. */
 export const EXTEND_MINUTES = 15
+
+/** Reminder presets (minutes) for no-limit sessions. */
+export const REMINDER_PRESET_MINUTES = [15, 30, 45, 60]
+/** Ceiling for the reminder threshold. Mirrors MAX_REMINDER_MINUTES. */
+export const MAX_REMINDER_MINUTES = 120

@@ -94,7 +94,13 @@ export function SessionReviewBanner({ metric, refreshKey, onResolved }: SessionR
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{t('review.title')}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{t('review.plannedEnd')}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t(
+                session.close_reason === 'idle_timeout'
+                  ? 'review.idleTimeout'
+                  : 'review.plannedEnd',
+              )}
+            </p>
             <p className="mt-2 text-sm">
               {formatLongDate(session.date)}
               {session.started_at && (

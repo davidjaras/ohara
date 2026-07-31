@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from .metrics import Metric, get_measurement_metric, get_session_metric
-from .models import ActiveTimer, Measurement, Session, WeeklyGoal
+from .models import ActiveTimer, Measurement, Session, UserPreference, WeeklyGoal
 
 
 class TimerError(Exception):
@@ -62,12 +62,21 @@ def start_timer(
         )
     if ActiveTimer.objects.filter(user=user, metric=metric_key).exists():
         raise TimerError(_("There is already a session in progress for this metric."))
+    reminder_minutes = None
+    if planned_minutes is None:
+        # Snapshot the reminder threshold: a settings change mid-session must
+        # not move a running deadline. Planned sessions have their own
+        # countdown and take no reminders.
+        pref = UserPreference.objects.filter(user=user).first()
+        reminder_minutes = pref.reminder_minutes if pref else settings.DEFAULT_REMINDER_MINUTES
     return ActiveTimer.objects.create(
         user=user,
         metric=metric_key,
         started_at=now,
         running_since=now,
         planned_duration_seconds=None if planned_minutes is None else planned_minutes * 60,
+        reminder_interval_seconds=None if reminder_minutes is None else reminder_minutes * 60,
+        last_confirmed_at=now,
     )
 
 
@@ -78,13 +87,28 @@ def _get_timer(user, metric_key: str) -> ActiveTimer:
         raise TimerError(_("There is no session in progress."))
 
 
+def _confirm(timer: ActiveTimer, now: datetime) -> None:
+    """Record a confirmed interaction: the truncation point for idle closes.
+
+    Every mutating timer action counts; a passive state read never does,
+    because lazy finalization rides on those reads and a dashboard load is
+    no evidence of studying.
+    """
+    timer.confirmed_seconds = timer.elapsed_seconds(now)
+    timer.last_confirmed_at = now
+
+
+_CONFIRM_FIELDS = ["confirmed_seconds", "last_confirmed_at"]
+
+
 def pause_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
     timer = _get_timer(user, metric_key)
     if timer.is_paused:
         raise TimerError(_("The session is already paused."))
     timer.accumulated_seconds = timer.elapsed_seconds(now)
     timer.running_since = None
-    timer.save(update_fields=["accumulated_seconds", "running_since"])
+    _confirm(timer, now)
+    timer.save(update_fields=["accumulated_seconds", "running_since", *_CONFIRM_FIELDS])
     return timer
 
 
@@ -93,7 +117,16 @@ def resume_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
     if not timer.is_paused:
         raise TimerError(_("The session is not paused."))
     timer.running_since = now
-    timer.save(update_fields=["running_since"])
+    _confirm(timer, now)
+    timer.save(update_fields=["running_since", *_CONFIRM_FIELDS])
+    return timer
+
+
+def checkin_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
+    """Answer a reminder: the user is still there, so push the deadline out."""
+    timer = _get_timer(user, metric_key)
+    _confirm(timer, now)
+    timer.save(update_fields=_CONFIRM_FIELDS)
     return timer
 
 
@@ -144,7 +177,8 @@ def extend_timer(user, metric_key: str, now: datetime, minutes: int) -> ActiveTi
             % {"max": settings.MAX_DAY_MINUTES}
         )
     timer.planned_duration_seconds = new_planned
-    timer.save(update_fields=["planned_duration_seconds"])
+    _confirm(timer, now)
+    timer.save(update_fields=["planned_duration_seconds", *_CONFIRM_FIELDS])
     return timer
 
 
@@ -160,35 +194,55 @@ def finalize_expired_timer(user, metric_key: str, now: datetime) -> Session | No
 
     There is no background process: every view that can observe a timer calls
     this first, so an expired timer becomes a session on the next request,
-    whenever that arrives. A planned session that outlived its grace is closed
-    at exactly the planned duration. Paused timers never expire: paused time
-    accrues nothing, so a forgotten pause cannot inflate any record.
+    whenever that arrives. A planned session that outlived its grace closes at
+    exactly the planned duration; a no-limit session that missed two reminder
+    intervals closes truncated to its last confirmed interaction — never to
+    the threshold, because underestimating beats inflating. Paused timers
+    never expire: paused time accrues nothing, so a forgotten pause cannot
+    inflate any record.
     """
     timer = (
         ActiveTimer.objects.select_for_update()
         .filter(user=user, metric=metric_key)
         .first()
     )
-    if timer is None or timer.is_paused or timer.planned_duration_seconds is None:
+    if timer is None or timer.is_paused:
         return None
-    planned = timer.planned_duration_seconds
-    if timer.elapsed_seconds(now) < planned + settings.TIMER_GRACE_SECONDS:
-        return None
-    # The instant the running clock crossed the planned mark. If the crossing
-    # happened in an earlier running segment this lands slightly late, but the
-    # recorded duration is the planned one either way.
-    ended_at = timer.running_since + timedelta(
-        seconds=max(0, planned - timer.accumulated_seconds)
-    )
+
+    if timer.planned_duration_seconds is not None:
+        planned = timer.planned_duration_seconds
+        if timer.elapsed_seconds(now) < planned + settings.TIMER_GRACE_SECONDS:
+            return None
+        # The instant the running clock crossed the planned mark. If the
+        # crossing happened in an earlier running segment this lands slightly
+        # late, but the recorded duration is the planned one either way.
+        ended_at = timer.running_since + timedelta(
+            seconds=max(0, planned - timer.accumulated_seconds)
+        )
+        duration = planned
+        close_reason = Session.CLOSE_PLANNED_END
+        idle_threshold = None
+    else:
+        interval = timer.reminder_interval_seconds
+        if interval is None:  # reminders off: only the 24h clamp remains
+            return None
+        if timer.elapsed_seconds(now) < timer.confirmed_seconds + 2 * interval:
+            return None
+        ended_at = timer.last_confirmed_at or timer.started_at
+        duration = timer.confirmed_seconds
+        close_reason = Session.CLOSE_IDLE_TIMEOUT
+        idle_threshold = interval
+
     session = Session.objects.create(
         user=user,
         metric=timer.metric,
         date=local_date(timer.started_at),
-        duration_seconds=planned,
+        duration_seconds=duration,
         started_at=timer.started_at,
         ended_at=ended_at,
-        close_reason=Session.CLOSE_PLANNED_END,
-        estimated_duration_seconds=planned,
+        close_reason=close_reason,
+        estimated_duration_seconds=duration,
+        idle_threshold_seconds=idle_threshold,
     )
     timer.delete()
     return session

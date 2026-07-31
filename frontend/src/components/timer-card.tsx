@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pause, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { Check, Pause, Play, Plus, Square, Trash2 } from 'lucide-react'
 import { api, ApiError, type TimerState } from '@/lib/api'
 import {
   DEFAULT_PLANNED_MINUTES,
@@ -99,12 +99,25 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
   const remaining = planned !== null ? planned - elapsedSeconds : 0
   const inGrace = planned !== null && remaining <= 0
 
+  // No-limit sessions run on a reminder cycle instead of a countdown.
+  const interval =
+    timer?.active && planned === null ? (timer.reminder_interval_seconds ?? null) : null
+  const sinceConfirmed = interval !== null ? elapsedSeconds - (timer?.confirmed_seconds ?? 0) : 0
+  const inReminder = interval !== null && sinceConfirmed >= interval
+
+  const dueAtSeconds =
+    planned !== null
+      ? planned + graceSeconds
+      : interval !== null
+        ? (timer?.confirmed_seconds ?? 0) + 2 * interval
+        : null
+
   // When the local clock crosses the auto-close deadline, ask the server:
   // that query is what finalizes the session (there is no background job),
   // and the {active: false} response collapses this card to the start block.
   useEffect(() => {
-    if (!running || planned === null) return
-    if (elapsedSeconds < planned + graceSeconds + 2 || finalizingRef.current) return
+    if (!running || dueAtSeconds === null) return
+    if (elapsedSeconds < dueAtSeconds + 2 || finalizingRef.current) return
     finalizingRef.current = true
     api.timer.get(metric).then(
       (state) => {
@@ -271,6 +284,21 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
                   </p>
                 )}
               </TimerRing>
+            ) : interval !== null ? (
+              <TimerRing progress={sinceConfirmed / interval} mode="cycle">
+                {clock(elapsedSeconds)}
+                {inReminder ? (
+                  <p className="text-sm font-medium text-primary">{t('timer.stillStudying')}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t('timer.nextReminder', {
+                      duration: formatMinutes(
+                        Math.max(1, Math.ceil((interval - sinceConfirmed) / 60)),
+                      ),
+                    })}
+                  </p>
+                )}
+              </TimerRing>
             ) : (
               <p className="font-mono text-5xl font-semibold tabular-nums sm:text-6xl">
                 {formatClock(elapsedSeconds)}
@@ -281,7 +309,18 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
                 {t('timer.timeUpHint')}
               </p>
             )}
+            {inReminder && (
+              <p className="max-w-sm text-center text-sm text-muted-foreground">
+                {t('timer.reminderHint')}
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-center gap-2">
+              {inReminder && (
+                <Button size="lg" onClick={() => act(() => api.timer.checkin(metric))}>
+                  <Check className="size-4" />
+                  {t('timer.checkin')}
+                </Button>
+              )}
               {inGrace ? (
                 // Extending must cost one action and carry the same visual
                 // weight as finishing: a goal is not a ceiling.

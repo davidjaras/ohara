@@ -196,6 +196,53 @@ class TestAutoCloseFlow:
         assert r.status_code == 404
 
 
+class TestIdleCloseFlow:
+    def test_state_exposes_the_reminder_cycle(self, client):
+        r = client.post("/api/timer/start/", {}, format="json")
+        assert r.json()["reminder_interval_seconds"] == 30 * 60
+        assert r.json()["confirmed_seconds"] == 0
+
+    def test_checkin_resets_the_cycle(self, client):
+        t0 = timezone.now()
+        with mock.patch("tracker.views.timezone.now", return_value=t0):
+            client.post("/api/timer/start/", {}, format="json")
+        with mock.patch(
+            "tracker.views.timezone.now", return_value=t0 + timedelta(minutes=40)
+        ):
+            r = client.post("/api/timer/checkin/", {}, format="json")
+        assert r.status_code == 200
+        assert r.json()["confirmed_seconds"] == 40 * 60
+
+    def test_checkin_after_the_deadline_conflicts_and_truncates(self, client):
+        t0 = timezone.now() - timedelta(hours=2)
+        with mock.patch("tracker.views.timezone.now", return_value=t0):
+            client.post("/api/timer/start/", {}, format="json")
+        r = client.post("/api/timer/checkin/", {}, format="json")
+        assert r.status_code == 409
+        session = Session.objects.get()
+        assert session.close_reason == "idle_timeout"
+        assert session.duration_seconds == 0
+
+
+class TestPreferences:
+    def test_defaults(self, client):
+        body = client.get("/api/preferences/").json()
+        assert body == {"accent_color": "blue", "reminder_minutes": 30}
+
+    def test_partial_update_keeps_the_other_field(self, client):
+        client.put("/api/preferences/", {"reminder_minutes": 45}, format="json")
+        r = client.put("/api/preferences/", {"accent_color": "teal"}, format="json")
+        assert r.json() == {"accent_color": "teal", "reminder_minutes": 45}
+
+    def test_reminders_can_be_disabled(self, client):
+        r = client.put("/api/preferences/", {"reminder_minutes": None}, format="json")
+        assert r.json()["reminder_minutes"] is None
+
+    def test_reminder_beyond_the_cap_is_rejected(self, client):
+        r = client.put("/api/preferences/", {"reminder_minutes": 121}, format="json")
+        assert r.status_code == 400
+
+
 class TestManualEntry:
     def test_create_and_list(self, client):
         r = client.post(

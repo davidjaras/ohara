@@ -21,7 +21,14 @@ export interface TimerState {
   elapsed_seconds?: number
   planned_duration_seconds?: number | null
   grace_seconds?: number
+  reminder_interval_seconds?: number | null
+  confirmed_seconds?: number
   server_time?: string
+}
+
+export interface Preferences {
+  accent_color: string
+  reminder_minutes: number | null
 }
 
 export interface Session {
@@ -148,6 +155,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ metric, minutes }),
       }),
+    checkin: (metric: string) =>
+      request<TimerState>('/api/timer/checkin/', {
+        method: 'POST',
+        body: JSON.stringify({ metric }),
+      }),
     pause: (metric: string) =>
       request<TimerState>('/api/timer/pause/', {
         method: 'POST',
@@ -203,11 +215,11 @@ export const api = {
   },
 
   preferences: {
-    get: () => request<{ accent_color: string }>('/api/preferences/'),
-    set: (accent: string) =>
-      request<{ accent_color: string }>('/api/preferences/', {
+    get: () => request<Preferences>('/api/preferences/'),
+    set: (data: Partial<Preferences>) =>
+      request<Preferences>('/api/preferences/', {
         method: 'PUT',
-        body: JSON.stringify({ accent_color: accent }),
+        body: JSON.stringify(data),
       }),
   },
 

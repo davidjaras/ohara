@@ -49,6 +49,11 @@ const es = {
     timeUpHint:
       'Extiende la sesión o finalízala; si no respondes, se cerrará sola con la duración pactada.',
     extend: 'Extender {{minutes}} min',
+    stillStudying: '¿Sigues ahí?',
+    checkin: 'Sigo estudiando',
+    nextReminder: 'aviso en {{duration}}',
+    reminderHint:
+      'Si no respondes a dos avisos, la sesión se cerrará sola en tu última interacción.',
   },
   weekProgress: {
     title: 'Esta semana',
@@ -107,6 +112,8 @@ const es = {
   review: {
     title: 'Sesión cerrada automáticamente',
     plannedEnd: 'Se cerró sola al agotarse la duración pactada. Confírmala o ajusta la hora de fin.',
+    idleTimeout:
+      'Se cerró sola tras dos avisos sin respuesta; el tiempo quedó truncado a tu última interacción. Confírmala o ajusta la hora de fin.',
     startedAt: 'inició a las {{time}}',
     confirm: 'Confirmar',
     adjust: 'Ajustar fin',
@@ -143,6 +150,16 @@ const es = {
     goalSaved: 'Meta actualizada. Aplica desde esta semana; las pasadas no cambian.',
     save: 'Guardar meta',
     saving: 'Guardando…',
+    reminderTitle: 'Recordatorio de sesión abierta',
+    reminderDescription:
+      'Solo para sesiones sin límite: cada cuánto preguntar si sigues estudiando.',
+    reminderOff: 'Sin aviso',
+    reminderCustom: 'Otro',
+    reminderCustomLabel: 'Minutos entre avisos',
+    reminderHint:
+      'Tras dos avisos sin respuesta, la sesión se cierra sola truncada a tu última interacción; podrás ajustarla después. Las sesiones con duración pactada tienen su propia cuenta regresiva.',
+    reminderSaved: 'Recordatorio actualizado. Aplica a partir de la próxima sesión.',
+    reminderSave: 'Guardar recordatorio',
     languageTitle: 'Idioma',
     languageDescription: 'Idioma de la interfaz.',
     languageLabel: 'Idioma de la app',
@@ -213,6 +230,11 @@ const en: typeof es = {
     timeUpHint:
       'Extend the session or finish it; if you do not respond, it will close itself at the planned duration.',
     extend: 'Extend {{minutes}} min',
+    stillStudying: 'Still there?',
+    checkin: 'Still studying',
+    nextReminder: 'reminder in {{duration}}',
+    reminderHint:
+      'If you miss two reminders, the session will close itself at your last interaction.',
   },
   weekProgress: {
     title: 'This week',
@@ -271,6 +293,8 @@ const en: typeof es = {
   review: {
     title: 'Session closed automatically',
     plannedEnd: 'It closed itself when the planned duration ran out. Confirm it or adjust the end time.',
+    idleTimeout:
+      'It closed itself after two unanswered reminders; the time was truncated to your last interaction. Confirm it or adjust the end time.',
     startedAt: 'started at {{time}}',
     confirm: 'Confirm',
     adjust: 'Adjust end',
@@ -307,6 +331,16 @@ const en: typeof es = {
     goalSaved: 'Goal updated. It applies from this week on; past weeks do not change.',
     save: 'Save goal',
     saving: 'Saving…',
+    reminderTitle: 'Open-session reminder',
+    reminderDescription:
+      'Only for no-limit sessions: how often to ask whether you are still studying.',
+    reminderOff: 'Off',
+    reminderCustom: 'Other',
+    reminderCustomLabel: 'Minutes between reminders',
+    reminderHint:
+      'After two unanswered reminders the session closes itself, truncated to your last interaction; you can adjust it afterwards. Planned sessions run on their own countdown.',
+    reminderSaved: 'Reminder updated. It applies from the next session on.',
+    reminderSave: 'Save reminder',
     languageTitle: 'Language',
     languageDescription: 'Interface language.',
     languageLabel: 'App language',

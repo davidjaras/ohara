@@ -133,6 +133,12 @@ MAX_WEEK_MINUTES = 7 * MAX_DAY_MINUTES
 # auto-closes it at exactly the planned duration (see finalize_expired_timer).
 TIMER_GRACE_SECONDS = 300
 
+# No-limit sessions: reminder threshold defaults and ceiling (minutes). After
+# two unanswered reminder intervals the session auto-closes, truncated to the
+# last confirmed interaction.
+DEFAULT_REMINDER_MINUTES = 30
+MAX_REMINDER_MINUTES = 120
+
 METRICS = {
     "estudio": {
         "key": "estudio",

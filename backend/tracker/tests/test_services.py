@@ -6,7 +6,7 @@ import pytest
 
 from tracker import services
 from tracker.metrics import get_metric
-from tracker.models import ActiveTimer, Session, WeeklyGoal
+from tracker.models import ActiveTimer, Session, UserPreference, WeeklyGoal
 
 pytestmark = pytest.mark.django_db
 
@@ -210,7 +210,8 @@ class TestAutoClose:
         assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(days=2)) is None
         assert ActiveTimer.objects.exists()
 
-    def test_open_ended_timer_is_left_alone(self, user):
+    def test_open_ended_timer_with_reminders_off_is_left_alone(self, user):
+        UserPreference.objects.create(user=user, reminder_minutes=None)
         services.start_timer(user, "estudio", self.T0)
         assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(hours=10)) is None
 
@@ -223,6 +224,79 @@ class TestAutoClose:
 
     def test_without_timer_returns_none(self, user):
         assert services.finalize_expired_timer(user, "estudio", self.T0) is None
+
+
+class TestIdleClose:
+    """No-limit sessions: two silent reminder intervals close the timer,
+    truncated to the last confirmed interaction."""
+
+    T0 = dt(2026, 7, 6, 10, 0)
+
+    def start(self, user):
+        # Default preference: 30-minute reminders, so the deadline sits at
+        # the last confirmation + 60 minutes.
+        return services.start_timer(user, "estudio", self.T0)
+
+    def test_start_snapshots_the_preference(self, user):
+        UserPreference.objects.create(user=user, reminder_minutes=45)
+        timer = self.start(user)
+        assert timer.reminder_interval_seconds == 45 * 60
+
+    def test_start_defaults_to_thirty_minutes_without_preference(self, user):
+        assert self.start(user).reminder_interval_seconds == 30 * 60
+
+    def test_planned_sessions_take_no_reminders(self, user):
+        timer = services.start_timer(user, "estudio", self.T0, planned_minutes=50)
+        assert timer.reminder_interval_seconds is None
+
+    def test_preference_change_does_not_move_a_running_deadline(self, user):
+        pref = UserPreference.objects.create(user=user, reminder_minutes=30)
+        timer = self.start(user)
+        pref.reminder_minutes = 120
+        pref.save()
+        timer.refresh_from_db()
+        assert timer.reminder_interval_seconds == 30 * 60
+
+    def test_not_due_before_two_silent_intervals(self, user):
+        self.start(user)
+        at = self.T0 + timedelta(minutes=59)
+        assert services.finalize_expired_timer(user, "estudio", at) is None
+
+    def test_start_then_vanish_closes_at_zero(self, user):
+        self.start(user)
+        session = services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(minutes=60))
+        assert session.duration_seconds == 0
+        assert session.ended_at == self.T0
+        assert session.close_reason == Session.CLOSE_IDLE_TIMEOUT
+        assert session.estimated_duration_seconds == 0
+        assert session.idle_threshold_seconds == 30 * 60
+        assert session.needs_review is True
+        assert not ActiveTimer.objects.exists()
+
+    def test_checkin_pushes_the_deadline(self, user):
+        self.start(user)
+        services.checkin_timer(user, "estudio", self.T0 + timedelta(minutes=50))
+        at = self.T0 + timedelta(minutes=109)
+        assert services.finalize_expired_timer(user, "estudio", at) is None
+        session = services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(minutes=110))
+        # Truncated to the last check-in, never to the threshold.
+        assert session.duration_seconds == 50 * 60
+        assert session.ended_at == self.T0 + timedelta(minutes=50)
+
+    def test_pause_and_resume_count_as_confirmations(self, user):
+        self.start(user)
+        services.pause_timer(user, "estudio", self.T0 + timedelta(minutes=10))
+        services.resume_timer(user, "estudio", self.T0 + timedelta(minutes=20))
+        # Confirmed at resume: 10 active minutes. Due 60 active minutes later.
+        session = services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(minutes=80))
+        assert session.duration_seconds == 10 * 60
+        assert session.ended_at == self.T0 + timedelta(minutes=20)
+
+    def test_paused_timer_never_expires(self, user):
+        self.start(user)
+        services.pause_timer(user, "estudio", self.T0 + timedelta(minutes=10))
+        assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(days=2)) is None
+        assert ActiveTimer.objects.exists()
 
 
 class TestReviewSession:

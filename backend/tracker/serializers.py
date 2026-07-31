@@ -105,4 +105,12 @@ class SessionReviewInputSerializer(serializers.Serializer):
 
 
 class PreferencesSerializer(serializers.Serializer):
-    accent_color = serializers.ChoiceField(choices=settings.ACCENT_COLORS)
+    """Partial update: only the provided keys change."""
+
+    accent_color = serializers.ChoiceField(choices=settings.ACCENT_COLORS, required=False)
+    reminder_minutes = serializers.IntegerField(
+        min_value=1,
+        max_value=settings.MAX_REMINDER_MINUTES,
+        allow_null=True,
+        required=False,
+    )
