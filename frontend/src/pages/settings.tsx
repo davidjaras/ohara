@@ -9,6 +9,7 @@ import {
   REMINDER_PRESET_MINUTES,
 } from '@/lib/constants'
 import { LANGUAGES, setLanguage } from '@/lib/i18n'
+import { requestNotificationPermission } from '@/lib/notify'
 import { ACCENTS, setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -129,6 +130,9 @@ function ReminderCard() {
     e.preventDefault()
     const minutes =
       choice === 'off' ? null : choice === 'custom' ? Number(customMinutes) : choice
+    // The one moment of explicit intent: someone configuring reminders wants
+    // to be reminded, so this is where the browser permission is requested.
+    if (minutes !== null) requestNotificationPermission()
     setSaving(true)
     setMessage(null)
     setError(null)

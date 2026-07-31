@@ -9,6 +9,7 @@ import {
   PLANNED_PRESET_MINUTES,
 } from '@/lib/constants'
 import { formatClock, formatMinutes } from '@/lib/format'
+import { notify } from '@/lib/notify'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -111,6 +112,17 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
       : interval !== null
         ? (timer?.confirmed_seconds ?? 0) + 2 * interval
         : null
+
+  // One browser notification per phase entry, as reinforcement while the tab
+  // is alive; the on-screen UI and the lazy server close carry the real load.
+  const notifiedPhaseRef = useRef<'grace' | 'reminder' | null>(null)
+  useEffect(() => {
+    const phase = running && inGrace ? 'grace' : running && inReminder ? 'reminder' : null
+    if (phase === notifiedPhaseRef.current) return
+    notifiedPhaseRef.current = phase
+    if (phase === 'grace') notify(t('timer.timeUp'), t('timer.timeUpHint'))
+    if (phase === 'reminder') notify(t('timer.stillStudying'), t('timer.reminderHint'))
+  })
 
   // When the local clock crosses the auto-close deadline, ask the server:
   // that query is what finalizes the session (there is no background job),

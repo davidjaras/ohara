@@ -138,3 +138,43 @@ recorta a 24 h desde el inicio en vez de escribir una sesión imposible.
 duración de una sesión cronometrada vuelve mentira sus marcas de tiempo, así
 que se borran y la fila pasa a ser un registro manual corregido, que es lo que
 realmente es. Editar solo la nota las conserva.
+
+## Sesiones con duración pactada y cierre automático perezoso
+Olvidar detener el cronómetro es un fallo de memoria prospectiva, no de
+disciplina: el diseño hace innecesario recordar y barato reparar. Al iniciar
+se pacta una duración (presets 25/50/90, personalizada, o sin límite
+explícito); la última elegida se recuerda en localStorage como el bloque
+habitual.
+
+**Finalización perezosa, sin cron ni workers.** `finalize_expired_timer` corre
+al inicio de toda vista que pueda observar un cronómetro (estado, pause/resume,
+start, checkin, finish, lista de sesiones, stats) y decide solo con timestamps
+persistidos: quien vuelve una semana después encuentra la sesión ya cerrada y
+truncada en su primer request. La pactada cierra exacto en la duración pactada
+tras una gracia corta (`TIMER_GRACE_SECONDS`); la sin límite cierra tras dos
+intervalos de recordatorio sin respuesta (`reminder_interval_seconds`,
+congelado al iniciar desde `UserPreference.reminder_minutes`), truncada a la
+última interacción confirmada — nunca al umbral: subestimar gana a inflar.
+
+**Interacción confirmada** es toda acción mutante del usuario (start, pause,
+resume, extend, checkin); un GET de estado jamás, porque la finalización
+perezosa viaja en los GET y una carga pasiva del dashboard no es evidencia de
+estudio. Un cronómetro en pausa nunca expira: en pausa no acumula nada, así
+que no puede inflar ningún registro; solo espera.
+
+**Reparar en vez de cancelar.** El cierre automático deja `close_reason`,
+la estimación congelada (`estimated_duration_seconds`), el umbral que lo
+produjo (`idle_threshold_seconds`) y queda pendiente de revisión hasta
+`reviewed_at` (`needs_review` es derivado, no columna). El dashboard lo
+presenta en un banner: confirmar en un toque, ajustar el fin conservando el
+inicio real, o descartar. Esos campos permiten calibrar después con datos
+reales: frecuencia del olvido, tamaño del ajuste y si el umbral por defecto
+está mal puesto — sin construir analítica todavía.
+
+Un extend o un pause que llegan *después* del plazo no reviven el cronómetro:
+el servidor cierra primero y responde 409; el cliente refetchea y cae en el
+banner. La excepción deliberada es extend dentro del flujo normal: la UI solo
+lo ofrece durante la gracia, cuesta una acción y pesa lo mismo que finalizar,
+porque una meta de duración no debe volverse techo. Las notificaciones del
+navegador son refuerzo puro (una por fase, permiso pedido al guardar el
+recordatorio en ajustes); la corrección del dato nunca depende de ellas.
