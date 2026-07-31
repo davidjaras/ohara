@@ -36,12 +36,13 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${mm}-${dd}`
 }
 
-type Style = 'shortDay' | 'shortDate' | 'longDate'
+type Style = 'shortDay' | 'shortDate' | 'longDate' | 'time'
 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   shortDay: { weekday: 'short' },
   shortDate: { day: 'numeric', month: 'short' },
   longDate: { weekday: 'long', day: 'numeric', month: 'long' },
+  time: { hour: '2-digit', minute: '2-digit' },
 }
 
 const cache = new Map<string, Intl.DateTimeFormat>()
@@ -87,4 +88,9 @@ export function formatWeekRange(weekStartISO: string): string {
 /** "lunes, 6 de julio" / "Monday, July 6" — headers and lists. */
 export function formatLongDate(iso: string): string {
   return formatter('longDate').format(parseISODate(iso))
+}
+
+/** "10:30" / "10:30 AM" — wall time of a full ISO timestamp. */
+export function formatTimeOfDay(iso: string): string {
+  return formatter('time').format(new Date(iso))
 }

@@ -8,7 +8,19 @@ class Session(models.Model):
     `date` is the local day the session is attributed to: the day it started
     (timer flow) or the day chosen in a manual entry. Manual entries have no
     started_at/ended_at.
+
+    A session the server closed on its own carries a non-empty `close_reason`
+    and an estimated duration; it stays "pending review" until the user
+    confirms or adjusts it (`reviewed_at`).
     """
+
+    CLOSE_PLANNED_END = "planned_end"
+    CLOSE_IDLE_TIMEOUT = "idle_timeout"
+    CLOSE_REASON_CHOICES = [
+        ("", "closed by the user"),
+        (CLOSE_PLANNED_END, "planned duration exhausted"),
+        (CLOSE_IDLE_TIMEOUT, "no response to reminders"),
+    ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions"
@@ -21,10 +33,24 @@ class Session(models.Model):
     note = models.TextField(blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    close_reason = models.CharField(
+        max_length=20, blank=True, default="", choices=CLOSE_REASON_CHOICES
+    )
+    # The duration written at auto-close, frozen before any repair, so the
+    # size of later corrections can be measured against it.
+    estimated_duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+    # The reminder interval that produced an idle_timeout close, to judge
+    # later whether the default threshold is miscalibrated.
+    idle_threshold_seconds = models.PositiveIntegerField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-date", "-created_at"]
+
+    @property
+    def needs_review(self) -> bool:
+        return bool(self.close_reason) and self.reviewed_at is None
 
     def __str__(self) -> str:
         return f"{self.metric} {self.date} {self.duration_seconds}s"
@@ -35,7 +61,8 @@ class ActiveTimer(models.Model):
 
     Persisted so a browser refresh or server restart never loses the session.
     `running_since` is null while paused; `accumulated_seconds` holds the
-    segments already run before the last pause.
+    segments already run before the last pause. `planned_duration_seconds`
+    is null for a no-limit session.
     """
 
     user = models.ForeignKey(
@@ -45,6 +72,14 @@ class ActiveTimer(models.Model):
     started_at = models.DateTimeField()
     accumulated_seconds = models.PositiveIntegerField(default=0)
     running_since = models.DateTimeField(null=True, blank=True)
+    planned_duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+    # No-limit sessions: reminder threshold snapshotted at start (null =
+    # reminders off) and the last confirmed interaction — both the active
+    # seconds at that instant and its wall time, since with pauses neither
+    # can be derived from the other. Idle auto-close truncates to these.
+    reminder_interval_seconds = models.PositiveIntegerField(null=True, blank=True)
+    confirmed_seconds = models.PositiveIntegerField(default=0)
+    last_confirmed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -113,13 +148,18 @@ class WeeklyGoal(models.Model):
 
 
 class UserPreference(models.Model):
-    """Per-user UI preferences. Currently just the accent color of the theme."""
+    """Per-user preferences: theme accent and the open-session reminder."""
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="preference"
     )
     accent_color = models.CharField(
         max_length=20, default=settings.DEFAULT_ACCENT_COLOR
+    )
+    # Reminder threshold for no-limit sessions, in minutes; null disables the
+    # reminders (and with them the idle auto-close).
+    reminder_minutes = models.PositiveIntegerField(
+        null=True, blank=True, default=settings.DEFAULT_REMINDER_MINUTES
     )
 
     def __str__(self) -> str:

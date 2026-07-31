@@ -2,8 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { KeyRound, LogOut } from 'lucide-react'
 import { api, logout } from '@/lib/api'
-import { MAX_WEEK_MINUTES, METRIC_ESTUDIO } from '@/lib/constants'
+import {
+  MAX_REMINDER_MINUTES,
+  MAX_WEEK_MINUTES,
+  METRIC_ESTUDIO,
+  REMINDER_PRESET_MINUTES,
+} from '@/lib/constants'
 import { LANGUAGES, setLanguage } from '@/lib/i18n'
+import { requestNotificationPermission } from '@/lib/notify'
 import { ACCENTS, setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -17,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { RangeSelect } from '@/components/range-select'
 
 function GoalCard() {
   const { t } = useTranslation()
@@ -85,6 +92,110 @@ function GoalCard() {
   )
 }
 
+type ReminderChoice = number | 'custom' | 'off'
+
+function ReminderCard() {
+  const { t } = useTranslation()
+  const [choice, setChoice] = useState<ReminderChoice>(30)
+  const [customMinutes, setCustomMinutes] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.preferences.get().then(
+      (pref) => {
+        setLoaded(true)
+        if (pref.reminder_minutes === null) {
+          setChoice('off')
+        } else if (REMINDER_PRESET_MINUTES.includes(pref.reminder_minutes)) {
+          setChoice(pref.reminder_minutes)
+        } else {
+          setChoice('custom')
+          setCustomMinutes(String(pref.reminder_minutes))
+        }
+      },
+      (e: Error) => setError(e.message),
+    )
+  }, [])
+
+  const customInvalid =
+    choice === 'custom' &&
+    (!Number.isInteger(Number(customMinutes)) ||
+      Number(customMinutes) < 1 ||
+      Number(customMinutes) > MAX_REMINDER_MINUTES)
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const minutes =
+      choice === 'off' ? null : choice === 'custom' ? Number(customMinutes) : choice
+    // The one moment of explicit intent: someone configuring reminders wants
+    // to be reminded, so this is where the browser permission is requested.
+    if (minutes !== null) requestNotificationPermission()
+    setSaving(true)
+    setMessage(null)
+    setError(null)
+    api.preferences.set({ reminder_minutes: minutes }).then(
+      () => {
+        setSaving(false)
+        setMessage(t('settings.reminderSaved'))
+      },
+      (err: Error) => {
+        setSaving(false)
+        setError(err.message)
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('settings.reminderTitle')}</CardTitle>
+        <CardDescription>{t('settings.reminderDescription')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <RangeSelect<ReminderChoice>
+              options={[
+                ...REMINDER_PRESET_MINUTES.map((minutes) => ({
+                  value: minutes as ReminderChoice,
+                  label: t('timer.presetMinutes', { count: minutes }),
+                })),
+                { value: 'custom', label: t('settings.reminderCustom') },
+                { value: 'off', label: t('settings.reminderOff') },
+              ]}
+              value={choice}
+              onChange={setChoice}
+            />
+            {choice === 'custom' && (
+              <Input
+                type="number"
+                min={1}
+                max={MAX_REMINDER_MINUTES}
+                step={1}
+                aria-label={t('settings.reminderCustomLabel')}
+                className="w-24"
+                value={customMinutes}
+                onChange={(e) => setCustomMinutes(e.target.value)}
+              />
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">{t('settings.reminderHint')}</p>
+          {message && <p className="text-sm text-primary">{message}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div>
+            <Button type="submit" disabled={saving || !loaded || customInvalid}>
+              {saving ? t('settings.saving') : t('settings.reminderSave')}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 function LanguageCard() {
   const { t, i18n } = useTranslation()
 
@@ -134,7 +245,7 @@ function ThemeCard() {
     setSaving(true)
     setMessage(null)
     setError(null)
-    api.preferences.set(selected).then(
+    api.preferences.set({ accent_color: selected }).then(
       (pref) => {
         setSaving(false)
         setAccent(pref.accent_color)
@@ -226,6 +337,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto grid max-w-xl gap-4 sm:gap-5">
       <GoalCard />
+      <ReminderCard />
       <LanguageCard />
       <ThemeCard />
       <AccountCard />

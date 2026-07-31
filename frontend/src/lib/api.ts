@@ -19,7 +19,16 @@ export interface TimerState {
   started_at?: string
   is_paused?: boolean
   elapsed_seconds?: number
+  planned_duration_seconds?: number | null
+  grace_seconds?: number
+  reminder_interval_seconds?: number | null
+  confirmed_seconds?: number
   server_time?: string
+}
+
+export interface Preferences {
+  accent_color: string
+  reminder_minutes: number | null
 }
 
 export interface Session {
@@ -31,6 +40,9 @@ export interface Session {
   note: string
   started_at: string | null
   ended_at: string | null
+  close_reason: string
+  estimated_duration_seconds: number | null
+  needs_review: boolean
   created_at: string
 }
 
@@ -133,8 +145,18 @@ export const api = {
 
   timer: {
     get: (metric: string) => request<TimerState>(`/api/timer/?metric=${metric}`),
-    start: (metric: string) =>
+    start: (metric: string, plannedMinutes: number | null) =>
       request<TimerState>('/api/timer/start/', {
+        method: 'POST',
+        body: JSON.stringify({ metric, planned_minutes: plannedMinutes }),
+      }),
+    extend: (metric: string, minutes: number) =>
+      request<TimerState>('/api/timer/extend/', {
+        method: 'POST',
+        body: JSON.stringify({ metric, minutes }),
+      }),
+    checkin: (metric: string) =>
+      request<TimerState>('/api/timer/checkin/', {
         method: 'POST',
         body: JSON.stringify({ metric }),
       }),
@@ -160,6 +182,13 @@ export const api = {
   sessions: {
     list: (metric: string, limit = 50) =>
       request<Session[]>(`/api/sessions/?metric=${metric}&limit=${limit}`),
+    pendingReview: (metric: string) =>
+      request<Session[]>(`/api/sessions/?metric=${metric}&needs_review=1`),
+    review: (id: number, data: { action: 'confirm' | 'adjust'; ended_at?: string; note?: string }) =>
+      request<Session>(`/api/sessions/${id}/review/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     create: (data: { metric: string; date: string; minutes: number; note: string }) =>
       request<Session>('/api/sessions/', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: { date?: string; minutes?: number; note?: string }) =>
@@ -186,11 +215,11 @@ export const api = {
   },
 
   preferences: {
-    get: () => request<{ accent_color: string }>('/api/preferences/'),
-    set: (accent: string) =>
-      request<{ accent_color: string }>('/api/preferences/', {
+    get: () => request<Preferences>('/api/preferences/'),
+    set: (data: Partial<Preferences>) =>
+      request<Preferences>('/api/preferences/', {
         method: 'PUT',
-        body: JSON.stringify({ accent_color: accent }),
+        body: JSON.stringify(data),
       }),
   },
 

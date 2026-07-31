@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CumulativeWeekChart, WeeklyChart } from '@/components/charts'
 import { RangeSelect } from '@/components/range-select'
 import { useLayoutContext } from '@/components/layout'
+import { SessionReviewBanner } from '@/components/session-review-banner'
 import { TimerCard } from '@/components/timer-card'
 import { WeekList } from '@/components/week-list'
 
@@ -19,6 +20,7 @@ export function DashboardPage() {
   const { refreshStreak } = useLayoutContext()
   const [stats, setStats] = useState<Stats | null>(null)
   const [weeks, setWeeks] = useState(12)
+  const [reviewKey, setReviewKey] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   const loadStats = useCallback(() => {
@@ -27,11 +29,12 @@ export function DashboardPage() {
 
   useEffect(loadStats, [loadStats])
 
-  // A finished session can push the week over its goal, changing the streak
-  // shown in the navbar — refresh both the page stats and that badge.
+  // A finished or auto-closed session changes the stats, the navbar streak
+  // and possibly the pending-review banner — refresh the three together.
   const handleSessionSaved = useCallback(() => {
     loadStats()
     refreshStreak()
+    setReviewKey((n) => n + 1)
   }, [loadStats, refreshStreak])
 
   if (error) {
@@ -44,6 +47,11 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-4 sm:gap-5">
+      <SessionReviewBanner
+        metric={METRIC_ESTUDIO}
+        refreshKey={reviewKey}
+        onResolved={handleSessionSaved}
+      />
       <TimerCard metric={METRIC_ESTUDIO} onSessionSaved={handleSessionSaved} />
 
       {stats && (

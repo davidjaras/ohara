@@ -87,6 +87,162 @@ class TestTimerFlow:
         assert Session.objects.count() == 0
 
 
+class TestAutoCloseFlow:
+    def start_planned(self, client, t0, minutes=50):
+        with mock.patch("tracker.views.timezone.now", return_value=t0):
+            return client.post(
+                "/api/timer/start/", {"planned_minutes": minutes}, format="json"
+            )
+
+    def test_start_returns_the_planned_fields(self, client):
+        r = self.start_planned(client, timezone.now())
+        assert r.status_code == 200
+        assert r.json()["planned_duration_seconds"] == 50 * 60
+        assert "grace_seconds" in r.json()
+
+    def test_get_timer_finalizes_an_expired_session(self, client):
+        t0 = timezone.now() - timedelta(hours=2)
+        self.start_planned(client, t0)
+        assert client.get("/api/timer/").json() == {"active": False}
+        session = Session.objects.get()
+        assert session.close_reason == "planned_end"
+        assert session.duration_seconds == 50 * 60
+
+    def test_session_list_finalizes_and_filters_pending_review(self, client):
+        t0 = timezone.now() - timedelta(hours=2)
+        self.start_planned(client, t0)
+        rows = client.get("/api/sessions/?needs_review=1").json()
+        assert len(rows) == 1
+        assert rows[0]["needs_review"] is True
+        assert rows[0]["estimated_duration_seconds"] == 50 * 60
+
+    def test_stats_finalize_an_expired_session(self, client):
+        t0 = timezone.now() - timedelta(hours=2)
+        self.start_planned(client, t0)
+        assert client.get("/api/stats/").json()["week_minutes"] == 50
+
+    def test_finish_after_expiry_conflicts_and_truncates(self, client):
+        t0 = timezone.now() - timedelta(hours=3)
+        self.start_planned(client, t0)
+        r = client.post("/api/timer/finish/", {"note": "tarde"}, format="json")
+        assert r.status_code == 409
+        assert Session.objects.get().duration_seconds == 50 * 60
+
+    def test_pause_after_expiry_conflicts(self, client):
+        t0 = timezone.now() - timedelta(hours=3)
+        self.start_planned(client, t0)
+        assert client.post("/api/timer/pause/", {}, format="json").status_code == 409
+
+    def test_starting_over_an_expired_session_closes_it_first(self, client):
+        t0 = timezone.now() - timedelta(hours=3)
+        self.start_planned(client, t0)
+        r = client.post("/api/timer/start/", {"planned_minutes": 25}, format="json")
+        assert r.status_code == 200
+        assert r.json()["active"] is True
+        assert Session.objects.filter(close_reason="planned_end").count() == 1
+
+    def test_extend(self, client):
+        self.start_planned(client, timezone.now())
+        r = client.post("/api/timer/extend/", {"minutes": 15}, format="json")
+        assert r.status_code == 200
+        assert r.json()["planned_duration_seconds"] == 65 * 60
+
+    def test_extend_an_open_session_conflicts(self, client):
+        client.post("/api/timer/start/", {}, format="json")
+        assert client.post("/api/timer/extend/", {"minutes": 15}, format="json").status_code == 409
+
+    def _expired(self, client):
+        t0 = timezone.now() - timedelta(hours=2)
+        self.start_planned(client, t0)
+        client.get("/api/timer/")
+        return Session.objects.get(), t0
+
+    def test_review_confirm(self, client):
+        session, _t0 = self._expired(client)
+        r = client.post(
+            f"/api/sessions/{session.pk}/review/", {"action": "confirm"}, format="json"
+        )
+        assert r.status_code == 200
+        assert r.json()["needs_review"] is False
+        assert r.json()["duration_seconds"] == 50 * 60
+
+    def test_review_adjust(self, client):
+        session, t0 = self._expired(client)
+        ended = (t0 + timedelta(minutes=30)).isoformat()
+        r = client.post(
+            f"/api/sessions/{session.pk}/review/",
+            {"action": "adjust", "ended_at": ended, "note": "me fui antes"},
+            format="json",
+        )
+        assert r.status_code == 200
+        assert r.json()["minutes"] == 30
+        assert r.json()["note"] == "me fui antes"
+
+    def test_review_adjust_rejects_a_bad_end(self, client):
+        session, t0 = self._expired(client)
+        ended = (t0 - timedelta(minutes=1)).isoformat()
+        r = client.post(
+            f"/api/sessions/{session.pk}/review/",
+            {"action": "adjust", "ended_at": ended},
+            format="json",
+        )
+        assert r.status_code == 400
+
+    def test_review_of_another_users_session_is_404(self, client, other_client):
+        session, _t0 = self._expired(client)
+        r = other_client.post(
+            f"/api/sessions/{session.pk}/review/", {"action": "confirm"}, format="json"
+        )
+        assert r.status_code == 404
+
+
+class TestIdleCloseFlow:
+    def test_state_exposes_the_reminder_cycle(self, client):
+        r = client.post("/api/timer/start/", {}, format="json")
+        assert r.json()["reminder_interval_seconds"] == 30 * 60
+        assert r.json()["confirmed_seconds"] == 0
+
+    def test_checkin_resets_the_cycle(self, client):
+        t0 = timezone.now()
+        with mock.patch("tracker.views.timezone.now", return_value=t0):
+            client.post("/api/timer/start/", {}, format="json")
+        with mock.patch(
+            "tracker.views.timezone.now", return_value=t0 + timedelta(minutes=40)
+        ):
+            r = client.post("/api/timer/checkin/", {}, format="json")
+        assert r.status_code == 200
+        assert r.json()["confirmed_seconds"] == 40 * 60
+
+    def test_checkin_after_the_deadline_conflicts_and_truncates(self, client):
+        t0 = timezone.now() - timedelta(hours=2)
+        with mock.patch("tracker.views.timezone.now", return_value=t0):
+            client.post("/api/timer/start/", {}, format="json")
+        r = client.post("/api/timer/checkin/", {}, format="json")
+        assert r.status_code == 409
+        session = Session.objects.get()
+        assert session.close_reason == "idle_timeout"
+        assert session.duration_seconds == 0
+
+
+class TestPreferences:
+    def test_defaults(self, client):
+        body = client.get("/api/preferences/").json()
+        assert body == {"accent_color": "blue", "reminder_minutes": 30}
+
+    def test_partial_update_keeps_the_other_field(self, client):
+        client.put("/api/preferences/", {"reminder_minutes": 45}, format="json")
+        r = client.put("/api/preferences/", {"accent_color": "teal"}, format="json")
+        assert r.json() == {"accent_color": "teal", "reminder_minutes": 45}
+
+    def test_reminders_can_be_disabled(self, client):
+        r = client.put("/api/preferences/", {"reminder_minutes": None}, format="json")
+        assert r.json()["reminder_minutes"] is None
+
+    def test_reminder_beyond_the_cap_is_rejected(self, client):
+        r = client.put("/api/preferences/", {"reminder_minutes": 121}, format="json")
+        assert r.status_code == 400
+
+
 class TestManualEntry:
     def test_create_and_list(self, client):
         r = client.post(

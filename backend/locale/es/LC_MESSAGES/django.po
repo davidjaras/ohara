@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-30 17:21-0500\n"
+"POT-Creation-Date: 2026-07-30 19:51-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -152,65 +152,90 @@ msgstr "La métrica %s no es de tipo sesión"
 msgid "Metric %s is not a measurement metric"
 msgstr "La métrica %s no es de tipo medición"
 
-#: tracker/serializers.py:49
+#: tracker/serializers.py:52
 msgid "Nothing to update."
 msgstr "No hay nada para actualizar."
 
-#: tracker/services.py:57
+#: tracker/services.py:60
+#, python-format
+msgid "The planned duration must be between 1 and %(max)d minutes."
+msgstr "La duración pactada debe estar entre 1 y %(max)d minutos."
+
+#: tracker/services.py:64
 msgid "There is already a session in progress for this metric."
 msgstr "Ya hay una sesión en curso para esta métrica."
 
-#: tracker/services.py:67
+#: tracker/services.py:78
 msgid "There is no session in progress."
 msgstr "No hay ninguna sesión en curso."
 
-#: tracker/services.py:73
+#: tracker/services.py:84
 msgid "The session is already paused."
 msgstr "La sesión ya está en pausa."
 
-#: tracker/services.py:83
+#: tracker/services.py:94
 msgid "The session is not paused."
 msgstr "La sesión no está en pausa."
 
-#: tracker/services.py:203
+#: tracker/services.py:137
+msgid "Only sessions with a planned duration can be extended."
+msgstr "Solo las sesiones con duración pactada se pueden extender."
+
+#: tracker/services.py:139 tracker/services.py:321
 msgid "Minutes must be greater than zero."
 msgstr "Los minutos deben ser mayores a cero."
 
-#: tracker/services.py:206
+#: tracker/services.py:143 tracker/services.py:228 tracker/services.py:324
 #, python-format
 msgid "A session cannot be longer than a day (%(max)d minutes)."
 msgstr "Una sesión no puede durar más de un día (%(max)d minutos)."
 
-#: tracker/services.py:209 tracker/services.py:420
+#: tracker/services.py:215 tracker/services.py:366 tracker/views.py:214
+msgid "No such session."
+msgstr "No existe esa sesión."
+
+#: tracker/services.py:217
+msgid "This session is not pending review."
+msgstr "Esta sesión no está pendiente de revisión."
+
+#: tracker/services.py:220
+msgid "An end time is required to adjust the session."
+msgstr "Se necesita una hora de fin para ajustar la sesión."
+
+#: tracker/services.py:222
+msgid "The end must be after the start."
+msgstr "El fin debe ser posterior al inicio."
+
+#: tracker/services.py:224
+msgid "The end cannot be in the future."
+msgstr "El fin no puede estar en el futuro."
+
+#: tracker/services.py:327 tracker/services.py:538
 msgid "The date cannot be in the future."
 msgstr "La fecha no puede estar en el futuro."
 
-#: tracker/services.py:214
+#: tracker/services.py:332
 #, python-format
 msgid "That day already has %(used)s logged; only %(free)s more fit."
 msgstr "Ese día ya tiene %(used)s registrados; solo caben %(free)s más."
 
-#: tracker/services.py:248 tracker/views.py:157
-msgid "No such session."
-msgstr "No existe esa sesión."
-
-#: tracker/services.py:285
+#: tracker/services.py:403
 msgid "The goal must be greater than zero."
 msgstr "La meta debe ser mayor a cero."
 
-#: tracker/services.py:288
+#: tracker/services.py:406
 #, python-format
 msgid "The goal cannot exceed the %(max)d minutes a week has."
 msgstr "La meta no puede superar los %(max)d minutos que tiene una semana."
 
-#: tracker/views.py:82
+#: tracker/views.py:107
 msgid "Invalid action."
 msgstr "Acción inválida."
 
-#: tracker/views.py:165
+#: tracker/views.py:243
 msgid "Missing metric parameter."
 msgstr "Falta el parámetro metric."
 
-#: tracker/views.py:192
+#: tracker/views.py:270
 msgid "No such measurement."
 msgstr "No existe esa medición."
