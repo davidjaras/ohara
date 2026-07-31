@@ -19,6 +19,9 @@ class SessionSerializer(serializers.ModelSerializer):
             "note",
             "started_at",
             "ended_at",
+            "close_reason",
+            "estimated_duration_seconds",
+            "needs_review",
             "created_at",
         ]
 
@@ -75,6 +78,30 @@ class FinishTimerSerializer(serializers.Serializer):
 
 class TimerActionSerializer(serializers.Serializer):
     metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
+
+
+class StartTimerSerializer(serializers.Serializer):
+    metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
+    planned_minutes = serializers.IntegerField(
+        min_value=1,
+        max_value=settings.MAX_DAY_MINUTES,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+
+class ExtendTimerSerializer(serializers.Serializer):
+    metric = serializers.CharField(default=settings.DEFAULT_SESSION_METRIC)
+    minutes = serializers.IntegerField(min_value=1, max_value=settings.MAX_DAY_MINUTES)
+
+
+class SessionReviewInputSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["confirm", "adjust"])
+    ended_at = serializers.DateTimeField(required=False, allow_null=True, default=None)
+    note = serializers.CharField(
+        allow_blank=True, required=False, default="", trim_whitespace=False
+    )
 
 
 class PreferencesSerializer(serializers.Serializer):

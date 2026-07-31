@@ -260,6 +260,11 @@ function SessionList({
                     {t('history.manualTag')}
                   </span>
                 )}
+                {session.close_reason && (
+                  <span className="ml-2 text-xs italic text-muted-foreground">
+                    {t('history.estimatedTag')}
+                  </span>
+                )}
               </p>
               {session.note && (
                 <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">

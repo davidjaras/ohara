@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pause, Play, Square, Trash2 } from 'lucide-react'
-import { api, type TimerState } from '@/lib/api'
+import { Pause, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { api, ApiError, type TimerState } from '@/lib/api'
+import {
+  DEFAULT_PLANNED_MINUTES,
+  EXTEND_MINUTES,
+  MAX_DAY_MINUTES,
+  PLANNED_PRESET_MINUTES,
+} from '@/lib/constants'
 import { formatClock, formatMinutes } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,12 +19,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { RangeSelect } from '@/components/range-select'
+import { TimerRing } from '@/components/timer-ring'
 
 interface TimerCardProps {
   metric: string
   onSessionSaved: () => void
+}
+
+// The habitual block: the last planned duration the user picked.
+const LAST_PLANNED_KEY = 'ohara-last-planned-minutes'
+
+type DurationChoice = number | 'custom' | 'none'
+
+function storedPlannedMinutes(): number {
+  const raw = Number(localStorage.getItem(LAST_PLANNED_KEY))
+  return Number.isInteger(raw) && raw >= 1 && raw <= MAX_DAY_MINUTES
+    ? raw
+    : DEFAULT_PLANNED_MINUTES
 }
 
 export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
@@ -35,6 +56,17 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
   // cancelling resume it. A timer you had already paused stays paused.
   const [pausedForFinish, setPausedForFinish] = useState(false)
   const [pausing, setPausing] = useState(false)
+  // In-flight guard for the refetch that lets the server auto-close.
+  const finalizingRef = useRef(false)
+
+  const [choice, setChoice] = useState<DurationChoice>(() => {
+    const stored = storedPlannedMinutes()
+    return PLANNED_PRESET_MINUTES.includes(stored) ? stored : 'custom'
+  })
+  const [customMinutes, setCustomMinutes] = useState(() => {
+    const stored = storedPlannedMinutes()
+    return PLANNED_PRESET_MINUTES.includes(stored) ? '' : String(stored)
+  })
 
   const applyState = useCallback((state: TimerState) => {
     fetchedAtRef.current = performance.now()
@@ -42,9 +74,11 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
     setError(null)
   }, [])
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     api.timer.get(metric).then(applyState, (e: Error) => setError(e.message))
   }, [metric, applyState])
+
+  useEffect(refresh, [refresh])
 
   const running = Boolean(timer?.active && !timer.is_paused)
 
@@ -60,8 +94,55 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
       (running ? (performance.now() - fetchedAtRef.current) / 1000 : 0)
     : 0
 
+  const planned = timer?.active ? (timer.planned_duration_seconds ?? null) : null
+  const graceSeconds = timer?.grace_seconds ?? 0
+  const remaining = planned !== null ? planned - elapsedSeconds : 0
+  const inGrace = planned !== null && remaining <= 0
+
+  // When the local clock crosses the auto-close deadline, ask the server:
+  // that query is what finalizes the session (there is no background job),
+  // and the {active: false} response collapses this card to the start block.
+  useEffect(() => {
+    if (!running || planned === null) return
+    if (elapsedSeconds < planned + graceSeconds + 2 || finalizingRef.current) return
+    finalizingRef.current = true
+    api.timer.get(metric).then(
+      (state) => {
+        finalizingRef.current = false
+        applyState(state)
+        if (!state.active) onSessionSaved()
+      },
+      () => {
+        finalizingRef.current = false
+      },
+    )
+  })
+
   const act = (action: () => Promise<TimerState>) => {
-    action().then(applyState, (e: Error) => setError(e.message))
+    action().then(applyState, (e: Error) => {
+      // A conflict usually means the timer expired server-side: refetch
+      // instead of surfacing a dead error, and let the dashboard show the
+      // review banner.
+      if (e instanceof ApiError && e.status === 409) {
+        refresh()
+        onSessionSaved()
+        return
+      }
+      setError(e.message)
+    })
+  }
+
+  const customInvalid =
+    choice === 'custom' &&
+    (!Number.isInteger(Number(customMinutes)) ||
+      Number(customMinutes) < 1 ||
+      Number(customMinutes) > MAX_DAY_MINUTES)
+
+  const handleStart = () => {
+    const minutes =
+      choice === 'none' ? null : choice === 'custom' ? Number(customMinutes) : choice
+    if (minutes !== null) localStorage.setItem(LAST_PLANNED_KEY, String(minutes))
+    act(() => api.timer.start(metric, minutes))
   }
 
   // The time spent writing the note is not study time, so the clock stops
@@ -118,17 +199,49 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
     )
   }
 
+  const clock = (seconds: number) => (
+    <p className="font-mono text-4xl font-semibold tabular-nums sm:text-5xl">
+      {formatClock(seconds)}
+    </p>
+  )
+
   return (
     <Card>
       <CardContent className="p-5 sm:p-6">
         {timer === null ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t('timer.loading')}</p>
         ) : !timer.active ? (
-          <div className="flex flex-col items-center gap-3 py-4">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <RangeSelect<DurationChoice>
+              options={[
+                ...PLANNED_PRESET_MINUTES.map((minutes) => ({
+                  value: minutes as DurationChoice,
+                  label: t('timer.presetMinutes', { count: minutes }),
+                })),
+                { value: 'custom', label: t('timer.custom') },
+                { value: 'none', label: t('timer.noLimit') },
+              ]}
+              value={choice}
+              onChange={setChoice}
+            />
+            {choice === 'custom' && (
+              <Input
+                type="number"
+                min={1}
+                max={MAX_DAY_MINUTES}
+                step={1}
+                placeholder="40"
+                aria-label={t('timer.customMinutes')}
+                className="w-32 text-center"
+                value={customMinutes}
+                onChange={(e) => setCustomMinutes(e.target.value)}
+              />
+            )}
             <Button
               size="lg"
               className="h-12 px-8 text-base"
-              onClick={() => act(() => api.timer.start(metric))}
+              onClick={handleStart}
+              disabled={customInvalid}
             >
               <Play className="size-5" />
               {t('timer.start')}
@@ -136,7 +249,7 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
             <p className="text-sm text-muted-foreground">{t('timer.keepsRunning')}</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-5 py-2">
+          <div className="flex flex-col items-center gap-4 py-2">
             <div className="flex items-center gap-2 text-sm">
               {timer.is_paused ? (
                 <span className="text-muted-foreground">{t('timer.paused')}</span>
@@ -147,11 +260,36 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
                 </>
               )}
             </div>
-            <p className="font-mono text-5xl font-semibold tabular-nums sm:text-6xl">
-              {formatClock(elapsedSeconds)}
-            </p>
+            {planned !== null ? (
+              <TimerRing progress={elapsedSeconds / planned} mode="planned">
+                {clock(Math.max(0, remaining))}
+                {inGrace ? (
+                  <p className="text-sm font-medium text-primary">{t('timer.timeUp')}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t('timer.plannedOf', { duration: formatMinutes(planned / 60) })}
+                  </p>
+                )}
+              </TimerRing>
+            ) : (
+              <p className="font-mono text-5xl font-semibold tabular-nums sm:text-6xl">
+                {formatClock(elapsedSeconds)}
+              </p>
+            )}
+            {inGrace && (
+              <p className="max-w-sm text-center text-sm text-muted-foreground">
+                {t('timer.timeUpHint')}
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-center gap-2">
-              {timer.is_paused ? (
+              {inGrace ? (
+                // Extending must cost one action and carry the same visual
+                // weight as finishing: a goal is not a ceiling.
+                <Button size="lg" onClick={() => act(() => api.timer.extend(metric, EXTEND_MINUTES))}>
+                  <Plus className="size-4" />
+                  {t('timer.extend', { minutes: EXTEND_MINUTES })}
+                </Button>
+              ) : timer.is_paused ? (
                 <Button
                   variant="outline"
                   size="lg"

@@ -51,12 +51,23 @@ def format_minutes(total_minutes: int) -> str:
 
 # --- Timer -------------------------------------------------------------------
 
-def start_timer(user, metric_key: str, now: datetime) -> ActiveTimer:
+def start_timer(
+    user, metric_key: str, now: datetime, planned_minutes: int | None = None
+) -> ActiveTimer:
     get_session_metric(metric_key)
+    if planned_minutes is not None and not 1 <= planned_minutes <= settings.MAX_DAY_MINUTES:
+        raise ValueError(
+            _("The planned duration must be between 1 and %(max)d minutes.")
+            % {"max": settings.MAX_DAY_MINUTES}
+        )
     if ActiveTimer.objects.filter(user=user, metric=metric_key).exists():
         raise TimerError(_("There is already a session in progress for this metric."))
     return ActiveTimer.objects.create(
-        user=user, metric=metric_key, started_at=now, running_since=now
+        user=user,
+        metric=metric_key,
+        started_at=now,
+        running_since=now,
+        planned_duration_seconds=None if planned_minutes is None else planned_minutes * 60,
     )
 
 
@@ -115,8 +126,115 @@ def finish_timer(user, metric_key: str, now: datetime, note: str = "") -> Sessio
     return session
 
 
+def extend_timer(user, metric_key: str, now: datetime, minutes: int) -> ActiveTimer:
+    """Push a planned session's target further out.
+
+    A duration goal must not become a ceiling that cuts a productive session
+    short: extending costs one action and the countdown simply continues.
+    """
+    timer = _get_timer(user, metric_key)
+    if timer.planned_duration_seconds is None:
+        raise TimerError(_("Only sessions with a planned duration can be extended."))
+    if minutes <= 0:
+        raise ValueError(_("Minutes must be greater than zero."))
+    new_planned = timer.planned_duration_seconds + minutes * 60
+    if new_planned > settings.MAX_DAY_MINUTES * 60:
+        raise ValueError(
+            _("A session cannot be longer than a day (%(max)d minutes).")
+            % {"max": settings.MAX_DAY_MINUTES}
+        )
+    timer.planned_duration_seconds = new_planned
+    timer.save(update_fields=["planned_duration_seconds"])
+    return timer
+
+
 def discard_timer(user, metric_key: str) -> None:
     _get_timer(user, metric_key).delete()
+
+
+# --- Auto-close and repair ---------------------------------------------------
+
+@transaction.atomic
+def finalize_expired_timer(user, metric_key: str, now: datetime) -> Session | None:
+    """Close a timer whose deadline has passed, judging from timestamps alone.
+
+    There is no background process: every view that can observe a timer calls
+    this first, so an expired timer becomes a session on the next request,
+    whenever that arrives. A planned session that outlived its grace is closed
+    at exactly the planned duration. Paused timers never expire: paused time
+    accrues nothing, so a forgotten pause cannot inflate any record.
+    """
+    timer = (
+        ActiveTimer.objects.select_for_update()
+        .filter(user=user, metric=metric_key)
+        .first()
+    )
+    if timer is None or timer.is_paused or timer.planned_duration_seconds is None:
+        return None
+    planned = timer.planned_duration_seconds
+    if timer.elapsed_seconds(now) < planned + settings.TIMER_GRACE_SECONDS:
+        return None
+    # The instant the running clock crossed the planned mark. If the crossing
+    # happened in an earlier running segment this lands slightly late, but the
+    # recorded duration is the planned one either way.
+    ended_at = timer.running_since + timedelta(
+        seconds=max(0, planned - timer.accumulated_seconds)
+    )
+    session = Session.objects.create(
+        user=user,
+        metric=timer.metric,
+        date=local_date(timer.started_at),
+        duration_seconds=planned,
+        started_at=timer.started_at,
+        ended_at=ended_at,
+        close_reason=Session.CLOSE_PLANNED_END,
+        estimated_duration_seconds=planned,
+    )
+    timer.delete()
+    return session
+
+
+@transaction.atomic
+def review_session(
+    user,
+    session_id: int,
+    now: datetime,
+    action: str,
+    ended_at: datetime | None = None,
+    note: str | None = None,
+) -> Session:
+    """Resolve an auto-closed session: keep the estimate or correct its end.
+
+    Adjusting keeps the real start and recomputes the duration from the new
+    end. The original estimate stays frozen in `estimated_duration_seconds`,
+    so the size of the correction can be measured later.
+    """
+    try:
+        session = Session.objects.select_for_update().get(user=user, pk=session_id)
+    except Session.DoesNotExist:
+        raise LookupError(_("No such session."))
+    if not session.needs_review:
+        raise ValueError(_("This session is not pending review."))
+    if action == "adjust":
+        if ended_at is None:
+            raise ValueError(_("An end time is required to adjust the session."))
+        if session.started_at is None or ended_at <= session.started_at:
+            raise ValueError(_("The end must be after the start."))
+        if ended_at > now:
+            raise ValueError(_("The end cannot be in the future."))
+        duration = int((ended_at - session.started_at).total_seconds())
+        if duration > settings.MAX_DAY_MINUTES * 60:
+            raise ValueError(
+                _("A session cannot be longer than a day (%(max)d minutes).")
+                % {"max": settings.MAX_DAY_MINUTES}
+            )
+        session.ended_at = ended_at
+        session.duration_seconds = duration
+    if note:
+        session.note = note
+    session.reviewed_at = now
+    session.save()
+    return session
 
 
 # --- Day attribution ---------------------------------------------------------

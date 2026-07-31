@@ -11,14 +11,17 @@ from . import services
 from .metrics import get_metric, list_metrics
 from .models import ActiveTimer, Measurement, Session, UserPreference
 from .serializers import (
+    ExtendTimerSerializer,
     FinishTimerSerializer,
     GoalInputSerializer,
     ManualSessionInputSerializer,
     MeasurementInputSerializer,
     MeasurementSerializer,
     PreferencesSerializer,
+    SessionReviewInputSerializer,
     SessionSerializer,
     SessionUpdateInputSerializer,
+    StartTimerSerializer,
     TimerActionSerializer,
 )
 
@@ -37,6 +40,8 @@ def _timer_state(timer: ActiveTimer | None) -> dict:
         "started_at": timer.started_at,
         "is_paused": timer.is_paused,
         "elapsed_seconds": timer.elapsed_seconds(now),
+        "planned_duration_seconds": timer.planned_duration_seconds,
+        "grace_seconds": settings.TIMER_GRACE_SECONDS,
         "server_time": now,
     }
 
@@ -56,6 +61,7 @@ class TimerView(APIView):
 
     def get(self, request):
         metric = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
+        services.finalize_expired_timer(request.user, metric, timezone.now())
         timer = ActiveTimer.objects.filter(user=request.user, metric=metric).first()
         return Response(_timer_state(timer))
 
@@ -68,11 +74,30 @@ class TimerView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class TimerStartView(APIView):
+    def post(self, request):
+        serializer = StartTimerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        now = timezone.now()
+        # An expired timer must not block the new session: it closes into a
+        # pending-review row and the fresh one starts on top.
+        services.finalize_expired_timer(request.user, data["metric"], now)
+        try:
+            timer = services.start_timer(
+                request.user, data["metric"], now, data["planned_minutes"]
+            )
+        except services.TimerError as e:
+            return _error(str(e), status.HTTP_409_CONFLICT)
+        except ValueError as e:
+            return _error(str(e), status.HTTP_400_BAD_REQUEST)
+        return Response(_timer_state(timer))
+
+
 class TimerActionView(APIView):
-    """POST /api/timer/<action>/ with action in start|pause|resume."""
+    """POST /api/timer/<action>/ with action in pause|resume."""
 
     actions = {
-        "start": services.start_timer,
         "pause": services.pause_timer,
         "resume": services.resume_timer,
     }
@@ -83,8 +108,30 @@ class TimerActionView(APIView):
         serializer = TimerActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         metric = serializer.validated_data["metric"]
+        now = timezone.now()
+        # Acting on an expired timer first closes it, then reports 409: the
+        # client refetches and lands on the review banner.
+        services.finalize_expired_timer(request.user, metric, now)
         try:
-            timer = self.actions[action](request.user, metric, timezone.now())
+            timer = self.actions[action](request.user, metric, now)
+        except services.TimerError as e:
+            return _error(str(e), status.HTTP_409_CONFLICT)
+        except ValueError as e:
+            return _error(str(e), status.HTTP_400_BAD_REQUEST)
+        return Response(_timer_state(timer))
+
+
+class TimerExtendView(APIView):
+    def post(self, request):
+        serializer = ExtendTimerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        # Deliberately no finalize here: extending is proof the user is
+        # present, and closing the session under their click would be hostile.
+        try:
+            timer = services.extend_timer(
+                request.user, data["metric"], timezone.now(), data["minutes"]
+            )
         except services.TimerError as e:
             return _error(str(e), status.HTTP_409_CONFLICT)
         except ValueError as e:
@@ -97,10 +144,12 @@ class TimerFinishView(APIView):
         serializer = FinishTimerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        now = timezone.now()
+        # A user returning days later and clicking finish must get the
+        # truncated auto-close (via 409 + banner), not an inflated record.
+        services.finalize_expired_timer(request.user, data["metric"], now)
         try:
-            session = services.finish_timer(
-                request.user, data["metric"], timezone.now(), data["note"]
-            )
+            session = services.finish_timer(request.user, data["metric"], now, data["note"])
         except services.TimerError as e:
             return _error(str(e), status.HTTP_409_CONFLICT)
         return Response(SessionSerializer(session).data, status=status.HTTP_201_CREATED)
@@ -109,9 +158,17 @@ class TimerFinishView(APIView):
 class SessionListView(APIView):
     def get(self, request):
         metric = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
+        services.finalize_expired_timer(request.user, metric, timezone.now())
         limit = int(request.query_params.get("limit", settings.DEFAULT_SESSION_LIMIT))
-        sessions = Session.objects.filter(user=request.user, metric=metric)[:limit]
-        return Response(SessionSerializer(sessions, many=True).data)
+        rows = Session.objects.filter(user=request.user, metric=metric)
+        if request.query_params.get("needs_review"):
+            # Oldest first: the review banner resolves them one at a time.
+            rows = (
+                rows.exclude(close_reason="")
+                .filter(reviewed_at__isnull=True)
+                .order_by("started_at")
+            )
+        return Response(SessionSerializer(rows[:limit], many=True).data)
 
     def post(self, request):
         serializer = ManualSessionInputSerializer(data=request.data)
@@ -156,6 +213,27 @@ class SessionDetailView(APIView):
         if not deleted:
             return _error(_("No such session."), status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SessionReviewView(APIView):
+    def post(self, request, pk: int):
+        serializer = SessionReviewInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            session = services.review_session(
+                request.user,
+                pk,
+                timezone.now(),
+                data["action"],
+                ended_at=data["ended_at"],
+                note=data["note"] or None,
+            )
+        except LookupError as e:
+            return _error(str(e), status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return _error(str(e), status.HTTP_400_BAD_REQUEST)
+        return Response(SessionSerializer(session).data)
 
 
 class MeasurementListView(APIView):
@@ -243,6 +321,7 @@ class StatsView(APIView):
     def get(self, request):
         metric_key = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
         weeks = int(request.query_params.get("weeks", settings.DEFAULT_STATS_WEEKS))
+        services.finalize_expired_timer(request.user, metric_key, timezone.now())
         today = timezone.localdate()
         try:
             weekly = services.weekly_summaries(request.user, metric_key, today, weeks)

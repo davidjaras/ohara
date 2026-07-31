@@ -120,6 +120,179 @@ class TestTimer:
             services.start_timer(user, "inventada", dt(2026, 7, 6, 10, 0))
 
 
+class TestPlannedTimer:
+    def test_start_stores_the_planned_duration(self, user):
+        timer = services.start_timer(user, "estudio", dt(2026, 7, 6, 10, 0), planned_minutes=50)
+        assert timer.planned_duration_seconds == 50 * 60
+
+    def test_start_without_plan_is_open_ended(self, user):
+        timer = services.start_timer(user, "estudio", dt(2026, 7, 6, 10, 0))
+        assert timer.planned_duration_seconds is None
+
+    @pytest.mark.parametrize("minutes", [0, -5, 1441])
+    def test_start_rejects_plans_outside_a_day(self, user, minutes):
+        with pytest.raises(ValueError):
+            services.start_timer(user, "estudio", dt(2026, 7, 6, 10, 0), planned_minutes=minutes)
+
+    def test_extend_moves_the_target(self, user):
+        t0 = dt(2026, 7, 6, 10, 0)
+        services.start_timer(user, "estudio", t0, planned_minutes=50)
+        timer = services.extend_timer(user, "estudio", t0 + timedelta(minutes=50), 15)
+        assert timer.planned_duration_seconds == 65 * 60
+
+    def test_extend_requires_a_planned_session(self, user):
+        t0 = dt(2026, 7, 6, 10, 0)
+        services.start_timer(user, "estudio", t0)
+        with pytest.raises(services.TimerError):
+            services.extend_timer(user, "estudio", t0 + timedelta(minutes=10), 15)
+
+    def test_extend_cannot_push_the_plan_beyond_a_day(self, user):
+        t0 = dt(2026, 7, 6, 10, 0)
+        services.start_timer(user, "estudio", t0, planned_minutes=1440)
+        with pytest.raises(ValueError):
+            services.extend_timer(user, "estudio", t0 + timedelta(minutes=10), 1)
+
+
+# --- Auto-close and repair ---------------------------------------------------
+
+class TestAutoClose:
+    @pytest.fixture(autouse=True)
+    def grace(self, settings):
+        settings.TIMER_GRACE_SECONDS = 300
+
+    T0 = dt(2026, 7, 6, 10, 0)
+
+    def start_planned(self, user, minutes=50):
+        return services.start_timer(user, "estudio", self.T0, planned_minutes=minutes)
+
+    def test_nothing_happens_before_the_plan_is_met(self, user):
+        self.start_planned(user)
+        assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(minutes=49)) is None
+        assert ActiveTimer.objects.exists()
+
+    def test_nothing_happens_during_the_grace(self, user):
+        self.start_planned(user)
+        at = self.T0 + timedelta(minutes=50, seconds=299)
+        assert services.finalize_expired_timer(user, "estudio", at) is None
+        assert ActiveTimer.objects.exists()
+
+    def test_closes_at_exactly_the_planned_duration_after_grace(self, user):
+        self.start_planned(user)
+        session = services.finalize_expired_timer(
+            user, "estudio", self.T0 + timedelta(minutes=55)
+        )
+        assert session.duration_seconds == 50 * 60
+        assert session.estimated_duration_seconds == 50 * 60
+        assert session.close_reason == Session.CLOSE_PLANNED_END
+        assert session.ended_at == self.T0 + timedelta(minutes=50)
+        assert session.started_at == self.T0
+        assert session.needs_review is True
+        assert not ActiveTimer.objects.exists()
+
+    def test_days_later_still_truncates_to_the_plan(self, user):
+        self.start_planned(user)
+        session = services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(days=3))
+        assert session.duration_seconds == 50 * 60
+        assert session.ended_at == self.T0 + timedelta(minutes=50)
+
+    def test_pauses_shift_the_crossing_instant(self, user):
+        self.start_planned(user)
+        services.pause_timer(user, "estudio", self.T0 + timedelta(minutes=10))
+        services.resume_timer(user, "estudio", self.T0 + timedelta(minutes=30))
+        # 10 min accumulated; the remaining 40 run from 10:30, crossing at 11:10.
+        session = services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(hours=2))
+        assert session.duration_seconds == 50 * 60
+        assert session.ended_at == self.T0 + timedelta(minutes=70)
+
+    def test_paused_timer_never_expires(self, user):
+        self.start_planned(user)
+        services.pause_timer(user, "estudio", self.T0 + timedelta(minutes=10))
+        assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(days=2)) is None
+        assert ActiveTimer.objects.exists()
+
+    def test_open_ended_timer_is_left_alone(self, user):
+        services.start_timer(user, "estudio", self.T0)
+        assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(hours=10)) is None
+
+    def test_extension_moves_the_deadline(self, user):
+        self.start_planned(user)
+        services.extend_timer(user, "estudio", self.T0 + timedelta(minutes=50), 30)
+        assert services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(minutes=60)) is None
+        session = services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(minutes=90))
+        assert session.duration_seconds == 80 * 60
+
+    def test_without_timer_returns_none(self, user):
+        assert services.finalize_expired_timer(user, "estudio", self.T0) is None
+
+
+class TestReviewSession:
+    T0 = dt(2026, 7, 6, 10, 0)
+    NOW = dt(2026, 7, 6, 12, 0)
+
+    def auto_closed(self, user) -> Session:
+        services.start_timer(user, "estudio", self.T0, planned_minutes=50)
+        return services.finalize_expired_timer(user, "estudio", self.T0 + timedelta(hours=1))
+
+    def test_confirm_marks_reviewed_and_keeps_the_estimate(self, user):
+        session = self.auto_closed(user)
+        reviewed = services.review_session(user, session.pk, self.NOW, "confirm")
+        assert reviewed.reviewed_at == self.NOW
+        assert reviewed.duration_seconds == 50 * 60
+        assert reviewed.needs_review is False
+
+    def test_confirm_can_attach_a_note(self, user):
+        session = self.auto_closed(user)
+        reviewed = services.review_session(user, session.pk, self.NOW, "confirm", note="repaso")
+        assert reviewed.note == "repaso"
+
+    def test_adjust_moves_the_end_and_recomputes_the_duration(self, user):
+        session = self.auto_closed(user)
+        reviewed = services.review_session(
+            user, session.pk, self.NOW, "adjust", ended_at=self.T0 + timedelta(minutes=30)
+        )
+        assert reviewed.duration_seconds == 30 * 60
+        assert reviewed.started_at == self.T0
+        assert reviewed.ended_at == self.T0 + timedelta(minutes=30)
+        # The original estimate stays frozen for calibration.
+        assert reviewed.estimated_duration_seconds == 50 * 60
+        assert reviewed.needs_review is False
+
+    def test_adjust_requires_an_end_time(self, user):
+        session = self.auto_closed(user)
+        with pytest.raises(ValueError):
+            services.review_session(user, session.pk, self.NOW, "adjust")
+
+    def test_adjust_rejects_an_end_before_the_start(self, user):
+        session = self.auto_closed(user)
+        with pytest.raises(ValueError):
+            services.review_session(
+                user, session.pk, self.NOW, "adjust", ended_at=self.T0 - timedelta(minutes=1)
+            )
+
+    def test_adjust_rejects_a_future_end(self, user):
+        session = self.auto_closed(user)
+        with pytest.raises(ValueError):
+            services.review_session(
+                user, session.pk, self.NOW, "adjust", ended_at=self.NOW + timedelta(minutes=1)
+            )
+
+    def test_reviewing_twice_fails(self, user):
+        session = self.auto_closed(user)
+        services.review_session(user, session.pk, self.NOW, "confirm")
+        with pytest.raises(ValueError):
+            services.review_session(user, session.pk, self.NOW, "confirm")
+
+    def test_a_measured_session_cannot_be_reviewed(self, user):
+        session = log(user, MONDAY, 30)
+        with pytest.raises(ValueError):
+            services.review_session(user, session.pk, self.NOW, "confirm")
+
+    def test_cannot_review_another_users_session(self, user, other_user):
+        session = self.auto_closed(user)
+        with pytest.raises(LookupError):
+            services.review_session(other_user, session.pk, self.NOW, "confirm")
+
+
 # --- Day attribution ---------------------------------------------------------
 
 @pytest.fixture
