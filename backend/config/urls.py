@@ -7,6 +7,7 @@ from django.views.generic import TemplateView
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("django.contrib.auth.urls")),
+    path("api/training/", include("training.urls")),
     path("api/", include("tracker.urls")),
     # SPA catch-all (frontend/dist/index.html). In development the frontend
     # runs on Vite (:5173) and this route is unused.

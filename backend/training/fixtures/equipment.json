@@ -1,0 +1,154 @@
+[
+  {
+    "model": "training.equipment",
+    "pk": 1,
+    "fields": {
+      "slug": "barbell",
+      "name": "Barbell"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 2,
+    "fields": {
+      "slug": "bench",
+      "name": "Bench"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 3,
+    "fields": {
+      "slug": "bodyweight",
+      "name": "Bodyweight"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 4,
+    "fields": {
+      "slug": "cable_machine",
+      "name": "Cable machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 5,
+    "fields": {
+      "slug": "dip_bars",
+      "name": "Dip bars"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 6,
+    "fields": {
+      "slug": "dumbbell",
+      "name": "Dumbbell"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 7,
+    "fields": {
+      "slug": "ez_bar",
+      "name": "Ez bar"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 8,
+    "fields": {
+      "slug": "hack_squat_machine",
+      "name": "Hack squat machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 9,
+    "fields": {
+      "slug": "kettlebell",
+      "name": "Kettlebell"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 10,
+    "fields": {
+      "slug": "leg_curl_machine",
+      "name": "Leg curl machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 11,
+    "fields": {
+      "slug": "leg_extension_machine",
+      "name": "Leg extension machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 12,
+    "fields": {
+      "slug": "leg_press_machine",
+      "name": "Leg press machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 13,
+    "fields": {
+      "slug": "machine",
+      "name": "Machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 14,
+    "fields": {
+      "slug": "pec_deck_machine",
+      "name": "Pec deck machine"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 15,
+    "fields": {
+      "slug": "plyo_box",
+      "name": "Plyo box"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 16,
+    "fields": {
+      "slug": "pull_up_bar",
+      "name": "Pull up bar"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 17,
+    "fields": {
+      "slug": "resistance_band",
+      "name": "Resistance band"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 18,
+    "fields": {
+      "slug": "t_bar",
+      "name": "T bar"
+    }
+  },
+  {
+    "model": "training.equipment",
+    "pk": 19,
+    "fields": {
+      "slug": "weight_plate",
+      "name": "Weight plate"
+    }
+  }
+]

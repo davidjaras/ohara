@@ -80,6 +80,154 @@ export interface Stats {
   weekly: WeekSummary[]
 }
 
+// --- Training module ---------------------------------------------------------
+// Every /api/training/ endpoint answers 404 when the module is disabled for
+// the user (deliberately not 403, so the module's existence is not revealed).
+// Callers treat that 404 as "training does not exist" and render nothing.
+
+export type RestRole = 'between_sets' | 'superset_transition' | 'superset_round_end'
+
+export interface TrainingExercise {
+  id: number
+  slug: string
+  name: string
+  primary_muscle: string
+  secondary_muscles: string[]
+  movement_pattern: string
+  equipment_required: string[]
+  is_unilateral: boolean
+  setting: 'home' | 'gym'
+}
+
+export interface SetPrescription {
+  id: number
+  set_number: number
+  target_reps_min: number | null
+  target_reps_max: number | null
+  to_failure: boolean
+  hold_seconds: number | null
+  reps_per_side: boolean
+  rest_seconds: number | null
+  rest_role: RestRole
+  tempo: string
+  is_backoff_set: boolean
+  cluster_reps: number[] | null
+  reps_raw: string
+}
+
+export interface ExerciseSlot {
+  id: number
+  order: number
+  series_label: string
+  series_position: number | null
+  is_superset: boolean
+  coach_annotation: string
+  modifiers: { type: string }[]
+  exercise: TrainingExercise
+  sets: SetPrescription[]
+}
+
+export interface WorkoutDay {
+  id: number
+  order: number
+  name: string
+  day_of_week: string
+}
+
+export interface WorkoutDayDetail extends WorkoutDay {
+  slots: ExerciseSlot[]
+}
+
+export interface TrainingWeek {
+  id: number
+  number: number
+  is_deload: boolean
+  is_synthesised: boolean
+  days: WorkoutDay[]
+}
+
+export interface TrainingPhase {
+  id: number
+  number: number
+  label: string
+  weeks_count: number
+  weeks_declared_in_source: number | null
+  number_inferred: boolean
+  weeks: TrainingWeek[]
+}
+
+export interface ProgramVariant {
+  id: number
+  slug: string
+  days_per_week: number
+  environment: string
+}
+
+export interface ProgramVariantDetail extends ProgramVariant {
+  phases: TrainingPhase[]
+}
+
+export interface Program {
+  id: number
+  slug: string
+  name: string
+  coach: string
+  variants: ProgramVariant[]
+}
+
+export interface ProgramDetail extends Omit<Program, 'variants'> {
+  variants: ProgramVariantDetail[]
+}
+
+export interface TrainingProfile {
+  active_variant: ProgramVariant | null
+  active_program: string | null
+  weight_unit: string
+}
+
+export interface Substitution {
+  id: number
+  slot: number
+  replacement: TrainingExercise
+  scope: 'session' | 'program'
+  session: number | null
+  reason: string
+  created_at: string
+}
+
+export interface SubstitutionOptions {
+  home: TrainingExercise[]
+  gym: TrainingExercise[]
+  active: Substitution | null
+}
+
+export interface SetLog {
+  id: number
+  prescription: number | null
+  performed_exercise: string
+  was_substituted: boolean
+  set_number: number
+  weight: string | null
+  weight_basis: 'total' | 'per_dumbbell' | 'bodyweight' | 'added'
+  reps: number | null
+  rpe: string | null
+  rir: number | null
+  import_note: string
+}
+
+export interface WorkoutSession {
+  id: number
+  day: WorkoutDay
+  week_number: number
+  performed_on: string
+  completed_at: string | null
+  notes: string
+}
+
+export interface WorkoutSessionDetail extends WorkoutSession {
+  logs: SetLog[]
+}
+
 export class ApiError extends Error {
   status: number
 
@@ -225,4 +373,60 @@ export const api = {
 
   stats: (metric: string, weeks = 12) =>
     request<Stats>(`/api/stats/?metric=${metric}&weeks=${weeks}`),
+
+  training: {
+    profile: () => request<TrainingProfile>('/api/training/profile/'),
+    updateProfile: (data: { active_variant?: number | null; weight_unit?: string }) =>
+      request<TrainingProfile>('/api/training/profile/', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    programs: () => request<Program[]>('/api/training/programs/'),
+    program: (slug: string) => request<ProgramDetail>(`/api/training/programs/${slug}/`),
+    day: (id: number) => request<WorkoutDayDetail>(`/api/training/days/${id}/`),
+    substitutions: (slotId: number) =>
+      request<SubstitutionOptions>(`/api/training/slots/${slotId}/substitutions/`),
+    substitute: (
+      slotId: number,
+      data: { replacement: number; scope: 'session' | 'program'; session?: number | null; reason?: string },
+    ) =>
+      request<Substitution>(`/api/training/slots/${slotId}/substitutions/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    sessions: {
+      list: () => request<WorkoutSession[]>('/api/training/sessions/'),
+      get: (id: number) => request<WorkoutSessionDetail>(`/api/training/sessions/${id}/`),
+      create: (data: { day: number; week_number: number; performed_on?: string; notes?: string }) =>
+        request<WorkoutSession>('/api/training/sessions/', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      update: (id: number, data: { notes?: string; completed?: boolean }) =>
+        request<WorkoutSessionDetail>(`/api/training/sessions/${id}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      log: (
+        sessionId: number,
+        data: {
+          slot: number
+          set_number: number
+          weight?: number | null
+          weight_basis?: 'total' | 'per_dumbbell' | 'bodyweight' | 'added'
+          reps?: number | null
+          rpe?: number | null
+          rir?: number | null
+        },
+      ) =>
+        request<SetLog>(`/api/training/sessions/${sessionId}/logs/`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      unlog: (sessionId: number, logId: number) =>
+        request<void>(`/api/training/sessions/${sessionId}/logs/${logId}/`, {
+          method: 'DELETE',
+        }),
+    },
+  },
 }
