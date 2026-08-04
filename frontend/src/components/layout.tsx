@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Flame, History, LayoutDashboard, Scale, Settings } from 'lucide-react'
-import { api, type Stats } from '@/lib/api'
+import { Dumbbell, Flame, History, LayoutDashboard, Scale, Settings } from 'lucide-react'
+import { api, type Stats, type TrainingProfile } from '@/lib/api'
 import { setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { OharaLogo } from '@/components/brand/OharaLogo'
@@ -13,24 +13,42 @@ const METRIC = 'estudio'
 export interface LayoutContext {
   /** Re-read the navbar streak after a session is saved or deleted. */
   refreshStreak: () => void
+  /**
+   * null while unknown or when the module is off (the profile endpoint answers
+   * 404 for users without training) — nothing training-related renders then.
+   */
+  training: TrainingProfile | null
+  /** Re-read the profile after the active variant changes. */
+  refreshTraining: () => void
 }
 
 export function useLayoutContext() {
   return useOutletContext<LayoutContext>()
 }
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
   { to: '/historial', key: 'nav.history', icon: History },
   { to: '/peso', key: 'nav.weight', icon: Scale },
   { to: '/ajustes', key: 'nav.settings', icon: Settings },
 ]
 
-function DesktopNav() {
+// The training entry exists only while the module is enabled: the gate lives
+// here, in the navigation render, not in the destination route.
+function navItems(trainingEnabled: boolean) {
+  if (!trainingEnabled) return BASE_NAV_ITEMS
+  return [
+    BASE_NAV_ITEMS[0],
+    { to: '/entrenamiento', key: 'nav.training', icon: Dumbbell },
+    ...BASE_NAV_ITEMS.slice(1),
+  ]
+}
+
+function DesktopNav({ trainingEnabled }: { trainingEnabled: boolean }) {
   const { t } = useTranslation()
   return (
     <nav className="hidden items-center gap-1 sm:flex">
-      {NAV_ITEMS.map(({ to, key, icon: Icon }) => (
+      {navItems(trainingEnabled).map(({ to, key, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -52,15 +70,16 @@ function DesktopNav() {
   )
 }
 
-function MobileTabBar() {
+function MobileTabBar({ trainingEnabled }: { trainingEnabled: boolean }) {
   const { t } = useTranslation()
+  const items = navItems(trainingEnabled)
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur sm:hidden">
       <div
         className="grid"
-        style={{ gridTemplateColumns: `repeat(${NAV_ITEMS.length}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
       >
-        {NAV_ITEMS.map(({ to, key, icon: Icon }) => (
+        {items.map(({ to, key, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -85,6 +104,7 @@ export function Layout() {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [streakWeeks, setStreakWeeks] = useState<number | null>(null)
+  const [training, setTraining] = useState<TrainingProfile | null>(null)
 
   const refreshStreak = useCallback(() => {
     // weeks=1 keeps the payload minimal; the streak is computed independently
@@ -92,15 +112,21 @@ export function Layout() {
     api.stats(METRIC, 1).then((s: Stats) => setStreakWeeks(s.streak_weeks), () => {})
   }, [])
 
+  const refreshTraining = useCallback(() => {
+    // 404 = module off for this user; keep the UI exactly as it is without it.
+    api.training.profile().then(setTraining, () => setTraining(null))
+  }, [])
+
   useEffect(() => {
     api.me().then((me) => setUsername(me.username), () => {})
     refreshStreak()
+    refreshTraining()
     // Reconcile the accent with the server value (localStorage was already
     // applied synchronously at startup, so this only corrects a stale cache).
     api.preferences.get().then((pref) => {
       if (pref.accent_color !== storedAccent()) setAccent(pref.accent_color)
     }, () => {})
-  }, [refreshStreak])
+  }, [refreshStreak, refreshTraining])
 
   return (
     <div className="min-h-svh">
@@ -111,7 +137,7 @@ export function Layout() {
             ohara
           </NavLink>
           <div className="flex items-center gap-2">
-            <DesktopNav />
+            <DesktopNav trainingEnabled={training !== null} />
             {streakWeeks !== null && (
               <span
                 className="ml-2 flex items-center gap-1 text-sm text-muted-foreground"
@@ -128,9 +154,11 @@ export function Layout() {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:pb-10">
-        <Outlet context={{ refreshStreak } satisfies LayoutContext} />
+        <Outlet
+          context={{ refreshStreak, training, refreshTraining } satisfies LayoutContext}
+        />
       </main>
-      <MobileTabBar />
+      <MobileTabBar trainingEnabled={training !== null} />
     </div>
   )
 }

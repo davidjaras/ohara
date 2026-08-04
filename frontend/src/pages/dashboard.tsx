@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api, type Stats } from '@/lib/api'
+import { ChevronRight, Dumbbell } from 'lucide-react'
+import { api, type Program, type Stats, type TrainingProfile } from '@/lib/api'
 import { METRIC_ESTUDIO } from '@/lib/constants'
 import { formatMinutes } from '@/lib/format'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,9 +17,43 @@ import { WeekList } from '@/components/week-list'
 // 26/52 give the half-year and full-year picture.
 const WEEK_RANGES = [4, 12, 26, 52]
 
+/** Entry point to the active training program. Renders only when the module
+ *  is enabled — with it off the dashboard is exactly the study dashboard. */
+function TrainingCard({ training }: { training: TrainingProfile }) {
+  const { t } = useTranslation()
+  const [programs, setPrograms] = useState<Program[]>([])
+
+  useEffect(() => {
+    api.training.programs().then(setPrograms, () => {})
+  }, [])
+
+  const activeProgram = programs.find((p) => p.slug === training.active_program)
+
+  return (
+    <Card>
+      <Link to="/entrenamiento" className="block transition-colors hover:bg-accent/40">
+        <CardHeader className="flex items-center gap-3">
+          <div className="rounded-md bg-accent p-2">
+            <Dumbbell className="size-5 text-primary" />
+          </div>
+          <div className="grid min-w-0 flex-1 gap-1">
+            <CardTitle>{t('training.cardTitle')}</CardTitle>
+            <CardDescription className="truncate">
+              {activeProgram
+                ? t('training.cardActive', { name: activeProgram.name })
+                : t('training.cardNone')}
+            </CardDescription>
+          </div>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+        </CardHeader>
+      </Link>
+    </Card>
+  )
+}
+
 export function DashboardPage() {
   const { t } = useTranslation()
-  const { refreshStreak } = useLayoutContext()
+  const { refreshStreak, training } = useLayoutContext()
   const [stats, setStats] = useState<Stats | null>(null)
   const [weeks, setWeeks] = useState(12)
   const [reviewKey, setReviewKey] = useState(0)
@@ -53,6 +89,7 @@ export function DashboardPage() {
         onResolved={handleSessionSaved}
       />
       <TimerCard metric={METRIC_ESTUDIO} onSessionSaved={handleSessionSaved} />
+      {training && <TrainingCard training={training} />}
 
       {stats && (
         <>
