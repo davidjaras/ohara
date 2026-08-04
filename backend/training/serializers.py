@@ -164,6 +164,11 @@ class WorkoutSessionDetailSerializer(WorkoutSessionSerializer):
         fields = WorkoutSessionSerializer.Meta.fields + ["logs"]
 
 
+class SessionUpdateSerializer(serializers.Serializer):
+    notes = serializers.CharField(required=False, allow_blank=True)
+    completed = serializers.BooleanField(required=False)
+
+
 class SessionInputSerializer(serializers.Serializer):
     day = serializers.IntegerField()
     week_number = serializers.IntegerField(min_value=1)

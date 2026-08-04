@@ -15,6 +15,7 @@ from .serializers import (
     ProgramSerializer,
     ProgramVariantSerializer,
     SessionInputSerializer,
+    SessionUpdateSerializer,
     SetLogInputSerializer,
     SetLogSerializer,
     SubstitutionInputSerializer,
@@ -178,6 +179,19 @@ class SessionDetailView(TrainingView):
         )
         return Response(WorkoutSessionDetailSerializer(session).data)
 
+    def patch(self, request, pk):
+        session = get_object_or_404(services.own_sessions(request.user), pk=pk)
+        serializer = SessionUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if "notes" in data:
+            session.notes = data["notes"]
+        if "completed" in data:
+            session.completed_at = timezone.now() if data["completed"] else None
+        session.save()
+        return self.get(request, pk)
+
 
 class SessionLogsView(TrainingView):
     def post(self, request, pk):
@@ -210,3 +224,13 @@ class SessionLogsView(TrainingView):
             rir=data.get("rir"),
         )
         return Response(SetLogSerializer(log).data, status=status.HTTP_201_CREATED)
+
+
+class SessionLogDetailView(TrainingView):
+    """Un-logging a set: the toggle's DELETE side."""
+
+    def delete(self, request, pk, log_id):
+        session = get_object_or_404(services.own_sessions(request.user), pk=pk)
+        log = get_object_or_404(SetLog, session=session, pk=log_id)
+        log.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

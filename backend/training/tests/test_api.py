@@ -2,7 +2,7 @@
 
 import pytest
 
-from training.models import ExerciseSlot, Exercise, ProgramVariant, WorkoutDay
+from training.models import ExerciseSlot, Exercise, ProgramVariant, SetLog, WorkoutDay
 
 pytestmark = pytest.mark.django_db
 
@@ -85,3 +85,42 @@ def test_create_session_and_log_against_prescription(client, enabled_profile, gl
     body = client.get(f"/api/training/sessions/{session_id}/").json()
     assert len(body["logs"]) == 1
     assert body["logs"][0]["prescription"] is not None
+
+
+def test_unlog_set_deletes_the_log(client, enabled_profile, glute_coach, session):
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    log_id = client.post(
+        f"/api/training/sessions/{session.pk}/logs/",
+        {"slot": slot.pk, "set_number": 1, "reps": 10},
+        format="json",
+    ).json()["id"]
+
+    response = client.delete(f"/api/training/sessions/{session.pk}/logs/{log_id}/")
+    assert response.status_code == 204
+    assert not SetLog.objects.filter(pk=log_id).exists()
+    # A second delete of the same log no longer finds it.
+    assert (
+        client.delete(f"/api/training/sessions/{session.pk}/logs/{log_id}/").status_code
+        == 404
+    )
+
+
+def test_complete_and_uncomplete_session(client, enabled_profile, session):
+    assert session.completed_at is None
+
+    body = client.patch(
+        f"/api/training/sessions/{session.pk}/", {"completed": True}, format="json"
+    ).json()
+    assert body["completed_at"] is not None
+
+    body = client.patch(
+        f"/api/training/sessions/{session.pk}/", {"completed": False}, format="json"
+    ).json()
+    assert body["completed_at"] is None
+
+
+def test_patch_session_notes(client, enabled_profile, session):
+    body = client.patch(
+        f"/api/training/sessions/{session.pk}/", {"notes": "felt strong"}, format="json"
+    ).json()
+    assert body["notes"] == "felt strong"

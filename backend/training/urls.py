@@ -11,4 +11,8 @@ urlpatterns = [
     path("sessions/", views.SessionListView.as_view()),
     path("sessions/<int:pk>/", views.SessionDetailView.as_view()),
     path("sessions/<int:pk>/logs/", views.SessionLogsView.as_view()),
+    path(
+        "sessions/<int:pk>/logs/<int:log_id>/",
+        views.SessionLogDetailView.as_view(),
+    ),
 ]

@@ -36,10 +36,23 @@ def endpoints(glute_coach, session):
 
 
 def test_user_without_training_profile_gets_404_everywhere(
-    other_client, endpoints
+    other_client, endpoints, session
 ):
     for url in endpoints:
         assert other_client.get(url).status_code == 404, url
+    # Write operations hit the same module gate before any lookup.
+    assert (
+        other_client.delete(
+            f"/api/training/sessions/{session.pk}/logs/999/"
+        ).status_code
+        == 404
+    )
+    assert (
+        other_client.patch(
+            f"/api/training/sessions/{session.pk}/", {"completed": True}, format="json"
+        ).status_code
+        == 404
+    )
 
 
 def test_user_with_disabled_profile_gets_404_everywhere(
@@ -91,6 +104,26 @@ def test_user_cannot_read_or_write_another_users_sessions_or_logs(
     assert session.pk not in [
         s["id"] for s in other_client.get("/api/training/sessions/").json()
     ]
+
+    # Nor delete A's logs or complete A's session.
+    log = SetLog.objects.create(
+        session=session, performed_exercise=slot.exercise, set_number=1
+    )
+    assert (
+        other_client.delete(
+            f"/api/training/sessions/{session.pk}/logs/{log.pk}/"
+        ).status_code
+        == 404
+    )
+    assert SetLog.objects.filter(pk=log.pk).exists()
+    assert (
+        other_client.patch(
+            f"/api/training/sessions/{session.pk}/", {"completed": True}, format="json"
+        ).status_code
+        == 404
+    )
+    session.refresh_from_db()
+    assert session.completed_at is None
 
 
 def test_cannot_set_active_variant_of_program_without_access(
