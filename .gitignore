@@ -16,3 +16,11 @@ frontend/dist/
 
 # Compiled translations
 backend/locale/**/*.mo
+
+# ── Training material under copyright ─────────────────────────────
+# Working folder with the extracted programs. NEVER committed:
+# the JSON files contain Mark Carroll's complete programs.
+/Ohara Training Module/
+
+# Downloaded exercise GIFs (third-party licence, do not redistribute)
+/media/exercise_gifs/
