@@ -73,7 +73,8 @@ class Equipment(models.Model):
 
 
 class Exercise(models.Model):
-    slug = models.SlugField(unique=True)
+    # Catalogue slugs run up to 72 characters; SlugField's default 50 truncates.
+    slug = models.SlugField(max_length=100, unique=True)
     name = models.CharField(max_length=200)
     # Source spellings; the program loader resolves exercise names through them.
     name_variants = models.JSONField(default=list, blank=True)
