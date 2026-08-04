@@ -106,7 +106,7 @@ frontend/
   src/
     lib/api.ts       # cliente tipado de la API
     components/      # layout, timer, charts, ui/ (shadcn)
-    pages/           # dashboard, historial, peso, ajustes
+    pages/           # dashboard, history, weight, settings, training
 Dockerfile           # multi-stage: target dev (compose) y prod (Railway)
 docker-compose.yml   # desarrollo local: db + backend + frontend
 docs/brand.md        # marca: símbolo, colores, usos (preview en /brand-preview)
