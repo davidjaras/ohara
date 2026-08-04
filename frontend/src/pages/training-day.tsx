@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ArrowLeftRight, Check, Timer } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Check, Info, Timer } from 'lucide-react'
 import {
   api,
   type ExerciseSlot,
@@ -15,6 +15,13 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useLayoutContext } from '@/components/layout'
 import { RestTimer, type RestRequest } from '@/components/rest-timer'
@@ -37,10 +44,10 @@ function groupSlots(slots: ExerciseSlot[]): SlotGroup[] {
   return groups
 }
 
+/** "A" for a standalone slot, "B1"/"B2" for superset members. Every slot
+ *  carries the letter the coach wrote, superset or not. */
 function memberLabel(slot: ExerciseSlot): string {
-  return slot.series_position !== null
-    ? `${slot.series_label}${slot.series_position}`
-    : ''
+  return `${slot.series_label}${slot.series_position ?? ''}`
 }
 
 function setKey(slot: ExerciseSlot, prescription: SetPrescription): string {
@@ -72,6 +79,32 @@ function repsPlaceholder(p: SetPrescription): string {
   if (p.target_reps_min !== null && p.target_reps_max !== null)
     return `${p.target_reps_min}–${p.target_reps_max}`
   return p.reps_raw
+}
+
+/**
+ * The tempo digits are never emphasised: which phase the coach highlighted is
+ * not in the source data (the programs ship the code as a plain number), so
+ * the column explains itself instead of guessing.
+ */
+function TempoLegend({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('training.tempoLegendTitle')}</DialogTitle>
+          <DialogDescription>{t('training.tempoLegendIntro')}</DialogDescription>
+        </DialogHeader>
+        <ul className="grid gap-2 text-sm">
+          <li>{t('training.tempoEccentric')}</li>
+          <li>{t('training.tempoBottom')}</li>
+          <li>{t('training.tempoConcentric')}</li>
+          <li>{t('training.tempoTop')}</li>
+        </ul>
+        <p className="text-xs text-muted-foreground">{t('training.tempoCompound')}</p>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 /** Shared column template so the header and every row align. */
@@ -168,6 +201,7 @@ function SlotBlock({
   weightUnit,
   onSubstitute,
   onOpenRest,
+  onOpenTempoLegend,
   onLog,
   onUnlog,
 }: {
@@ -178,6 +212,7 @@ function SlotBlock({
   weightUnit: string
   onSubstitute: () => void
   onOpenRest: () => void
+  onOpenTempoLegend: () => void
   onLog: (prescription: SetPrescription, weight: number | null, reps: number | null) => void
   onUnlog: (prescription: SetPrescription, log: SetLog) => void
 }) {
@@ -248,7 +283,15 @@ function SlotBlock({
       <div>
         <div className={cn(TABLE_GRID, 'pb-1 text-xs text-muted-foreground')}>
           <span className="text-center">{t('training.colSet')}</span>
-          <span className="text-center">{t('training.colTempo')}</span>
+          <button
+            type="button"
+            onClick={onOpenTempoLegend}
+            aria-label={t('training.tempoLegendOpen')}
+            className="flex items-center justify-center gap-1 transition-colors hover:text-foreground"
+          >
+            {t('training.colTempo')}
+            <Info className="size-3" />
+          </button>
           <span className="text-center">{t('training.colRest')}</span>
           <span className="text-center">
             {t('training.weightLabel', { unit: weightUnit })}
@@ -280,7 +323,13 @@ export function TrainingDayPage() {
   const { t } = useTranslation()
   const { dayId } = useParams()
   const [searchParams] = useSearchParams()
-  const weekNumber = Math.max(1, Number(searchParams.get('semana')) || 1)
+  const weekNumber = Math.max(1, Number(searchParams.get('week')) || 1)
+  // Where the day was opened from, so "back" lands on the phase and not at
+  // the root. Absent (a shared or bookmarked link) falls back to the list.
+  const fromProgram = searchParams.get('program')
+  const fromPhase = searchParams.get('phase')
+  const backTo =
+    fromProgram && fromPhase ? `/training/${fromProgram}/phase/${fromPhase}` : '/training'
   const { training } = useLayoutContext()
   const weightUnit = training?.weight_unit ?? 'kg'
 
@@ -294,6 +343,7 @@ export function TrainingDayPage() {
   const [completedAt, setCompletedAt] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [tempoLegend, setTempoLegend] = useState(false)
 
   // One workout session per visit, created on the first logged set.
   const sessionPromise = useRef<Promise<WorkoutSession> | null>(null)
@@ -435,7 +485,7 @@ export function TrainingDayPage() {
     <div className="mx-auto grid w-full max-w-lg gap-4 sm:gap-5">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link to="/entrenamiento" aria-label={t('nav.training')}>
+          <Link to={backTo} aria-label={t('training.backToPhase')}>
             <ArrowLeft className="size-5" />
           </Link>
         </Button>
@@ -479,6 +529,7 @@ export function TrainingDayPage() {
                   weightUnit={weightUnit}
                   onSubstitute={() => setSubstituting(slot)}
                   onOpenRest={() => openRest(group, slot)}
+                  onOpenTempoLegend={() => setTempoLegend(true)}
                   onLog={(prescription, weight, reps) =>
                     logSet(slot, prescription, weight, reps)
                   }
@@ -498,6 +549,7 @@ export function TrainingDayPage() {
                 weightUnit={weightUnit}
                 onSubstitute={() => setSubstituting(group.slots[0])}
                 onOpenRest={() => openRest(group, group.slots[0])}
+                onOpenTempoLegend={() => setTempoLegend(true)}
                 onLog={(prescription, weight, reps) =>
                   logSet(group.slots[0], prescription, weight, reps)
                 }
@@ -517,6 +569,8 @@ export function TrainingDayPage() {
           </Button>
         </div>
       )}
+
+      <TempoLegend open={tempoLegend} onClose={() => setTempoLegend(false)} />
 
       <SubstitutionDialog
         slot={substituting}

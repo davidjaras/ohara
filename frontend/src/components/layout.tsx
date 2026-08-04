@@ -28,9 +28,9 @@ export function useLayoutContext() {
 
 const BASE_NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
-  { to: '/historial', key: 'nav.history', icon: History },
-  { to: '/peso', key: 'nav.weight', icon: Scale },
-  { to: '/ajustes', key: 'nav.settings', icon: Settings },
+  { to: '/history', key: 'nav.history', icon: History },
+  { to: '/weight', key: 'nav.weight', icon: Scale },
+  { to: '/settings', key: 'nav.settings', icon: Settings },
 ]
 
 // The training entry exists only while the module is enabled: the gate lives
@@ -39,7 +39,7 @@ function navItems(trainingEnabled: boolean) {
   if (!trainingEnabled) return BASE_NAV_ITEMS
   return [
     BASE_NAV_ITEMS[0],
-    { to: '/entrenamiento', key: 'nav.training', icon: Dumbbell },
+    { to: '/training', key: 'nav.training', icon: Dumbbell },
     ...BASE_NAV_ITEMS.slice(1),
   ]
 }

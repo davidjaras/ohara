@@ -90,8 +90,12 @@ cookie + `X-CSRFToken`; `frontend/src/lib/api.ts` redirects to
 constraints are per-user; views always filter by `request.user`.
 
 **Frontend.** `src/lib/api.ts` is the single typed API client (all fetches go
-through its `request` helper). `src/pages/` holds the four routes (Spanish paths:
-`/`, `/historial`, `/peso`, `/ajustes`), `src/components/ui/` is shadcn. Accent
+through its `request` helper). `src/pages/` holds the routes — `/`, `/history`,
+`/weight`, `/settings` plus `/training`, `/training/:slug`,
+`/training/:slug/phase/:phaseId` and `/training/day/:dayId`. The Spanish paths
+the app used to serve (`/historial`, `/peso`, `/ajustes`, `/entrenamiento`,
+`/entrenamiento/dia/:dayId`) stay in `App.tsx` as redirects so old bookmarks
+keep working; do not add new ones. `src/components/ui/` is shadcn. Accent
 theming: `src/lib/theme.ts` sets `data-accent` on `<html>`, values live in
 `index.css`; the backend only stores which accent was picked. Browser
 notifications (`src/lib/notify.ts`) are reinforcement only — data correctness
@@ -106,8 +110,10 @@ migrations on boot. Settings split: `base.py` (shared, DB from `DATABASE_URL`),
 
 ## Conventions
 
-- Code, comments, docstrings and commit messages in **English**; user-facing UI
-  copy in **Spanish** (with an English translation).
+- Code, comments, docstrings, commit messages **and URL paths / query params**
+  in **English**; user-facing UI copy in **Spanish** (with an English
+  translation). The UI language is an i18n concern only — routes never change
+  with it, so a Spanish path buys nothing.
 - i18n has two layers: frontend dictionaries in `src/lib/i18n.ts` (es default,
   en), backend errors via `gettext` with the Spanish catalog in
   `backend/locale/` — API messages follow the client's `Accept-Language`.

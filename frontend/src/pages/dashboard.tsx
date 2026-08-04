@@ -31,7 +31,7 @@ function TrainingCard({ training }: { training: TrainingProfile }) {
 
   return (
     <Card>
-      <Link to="/entrenamiento" className="block transition-colors hover:bg-accent/40">
+      <Link to="/training" className="block transition-colors hover:bg-accent/40">
         <CardHeader className="flex items-center gap-3">
           <div className="rounded-md bg-accent p-2">
             <Dumbbell className="size-5 text-primary" />
