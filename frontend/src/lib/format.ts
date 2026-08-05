@@ -36,11 +36,12 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${mm}-${dd}`
 }
 
-type Style = 'shortDay' | 'shortDate' | 'longDate' | 'time'
+type Style = 'shortDay' | 'shortDate' | 'weekdayDate' | 'longDate' | 'time'
 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   shortDay: { weekday: 'short' },
   shortDate: { day: 'numeric', month: 'short' },
+  weekdayDate: { weekday: 'short', day: 'numeric', month: 'short' },
   longDate: { weekday: 'long', day: 'numeric', month: 'long' },
   time: { hour: '2-digit', minute: '2-digit' },
 }
@@ -83,6 +84,12 @@ export function formatWeekRange(weekStartISO: string): string {
   return dayFirst
     ? `${start.getDate()} – ${fmt.format(end)}`
     : `${fmt.format(start)} – ${end.getDate()}`
+}
+
+/** "mié, 5 ago" / "Wed, Aug 5" — a planned workout's date, weekday included
+ *  because the programs schedule by weekday. */
+export function formatWeekdayDate(iso: string): string {
+  return formatter('weekdayDate').format(parseISODate(iso))
 }
 
 /** "lunes, 6 de julio" / "Monday, July 6" — headers and lists. */

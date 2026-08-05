@@ -115,6 +115,23 @@ export interface SetPrescription {
   reps_raw: string
 }
 
+/** One set of a past session, as shown in "última vez" and the history dialog. */
+export interface PerformedSet {
+  set_number: number
+  weight: string | null
+  weight_basis: 'total' | 'per_dumbbell' | 'bodyweight' | 'added'
+  reps: number | null
+  was_substituted: boolean
+}
+
+export interface Performance {
+  id: number
+  performed_on: string | null
+  day_name: string
+  program: string
+  sets: PerformedSet[]
+}
+
 export interface ExerciseSlot {
   id: number
   order: number
@@ -125,6 +142,8 @@ export interface ExerciseSlot {
   modifiers: { type: string }[]
   exercise: TrainingExercise
   sets: SetPrescription[]
+  /** The previous time this exercise was logged; excludes today's session. */
+  last_performance: Performance | null
 }
 
 export interface WorkoutDay {
@@ -135,6 +154,17 @@ export interface WorkoutDay {
 }
 
 export interface WorkoutDayDetail extends WorkoutDay {
+  week_number: number
+  phase_number: number
+  /** Phase id — what `/training/:slug/phase/:phaseId` routes on. */
+  phase: number
+  program_slug: string
+  /** Set only while the day belongs to the active plan. */
+  scheduled_on: string | null
+  plan_week: number | null
+  in_active_plan: boolean
+  /** What was already logged on this day — null until the first set. */
+  session: WorkoutSessionDetail | null
   slots: ExerciseSlot[]
 }
 
@@ -161,6 +191,8 @@ export interface ProgramVariant {
   slug: string
   days_per_week: number
   environment: string
+  /** Weeks across every phase — how long committing to this routine is. */
+  total_weeks: number
 }
 
 export interface ProgramVariantDetail extends ProgramVariant {
@@ -180,9 +212,53 @@ export interface ProgramDetail extends Omit<Program, 'variants'> {
 }
 
 export interface TrainingProfile {
+  /** All three derive from the active run: the profile stores preferences. */
   active_variant: ProgramVariant | null
   active_program: string | null
+  active_run: number | null
   weight_unit: string
+}
+
+export type RunStatus = 'active' | 'completed' | 'abandoned'
+
+/** One day of the plan on a real date. */
+export interface ScheduledDay {
+  day: WorkoutDay
+  plan_week: number
+  scheduled_on: string
+  done: boolean
+  started: boolean
+  session_id: number | null
+}
+
+export interface Adherence {
+  done: number
+  planned: number
+  weeks: Record<string, { done: number; planned: number }>
+}
+
+/**
+ * A plan: a variant committed to from a start date. `schedule`, `adherence`,
+ * `plan_week` and `active_day` only come back for the active run.
+ */
+export interface ProgramRun {
+  id: number
+  program: Program
+  variant: ProgramVariant
+  started_on: string
+  ends_on: string
+  total_weeks: number
+  status: RunStatus
+  ended_on: string | null
+  plan_week?: number
+  adherence?: Adherence
+  schedule?: ScheduledDay[]
+  active_day?: ScheduledDay | null
+}
+
+export interface ExerciseHistory {
+  exercise: TrainingExercise
+  sessions: Performance[]
 }
 
 export interface Substitution {
@@ -203,6 +279,8 @@ export interface SubstitutionOptions {
 
 export interface SetLog {
   id: number
+  /** Resolved server-side from the prescription; the UI keys its rows by it. */
+  slot: number | null
   prescription: number | null
   performed_exercise: string
   was_substituted: boolean
@@ -218,6 +296,9 @@ export interface SetLog {
 export interface WorkoutSession {
   id: number
   day: WorkoutDay
+  run: number | null
+  /** Trained outside the active plan (or imported): never counts for adherence. */
+  off_plan: boolean
   week_number: number
   performed_on: string
   completed_at: string | null
@@ -376,7 +457,7 @@ export const api = {
 
   training: {
     profile: () => request<TrainingProfile>('/api/training/profile/'),
-    updateProfile: (data: { active_variant?: number | null; weight_unit?: string }) =>
+    updateProfile: (data: { weight_unit?: string }) =>
       request<TrainingProfile>('/api/training/profile/', {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -384,6 +465,26 @@ export const api = {
     programs: () => request<Program[]>('/api/training/programs/'),
     program: (slug: string) => request<ProgramDetail>(`/api/training/programs/${slug}/`),
     day: (id: number) => request<WorkoutDayDetail>(`/api/training/days/${id}/`),
+    runs: {
+      list: () => request<ProgramRun[]>('/api/training/runs/'),
+      // 204 when nothing is running; `request` turns that into undefined.
+      active: () =>
+        request<ProgramRun | undefined>('/api/training/runs/active/').then(
+          (run) => run ?? null,
+        ),
+      start: (data: { variant: number; started_on?: string }) =>
+        request<ProgramRun>('/api/training/runs/', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      update: (id: number, data: { status?: RunStatus; started_on?: string }) =>
+        request<ProgramRun>(`/api/training/runs/${id}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+    },
+    exerciseHistory: (exerciseId: number) =>
+      request<ExerciseHistory>(`/api/training/exercises/${exerciseId}/history/`),
     substitutions: (slotId: number) =>
       request<SubstitutionOptions>(`/api/training/slots/${slotId}/substitutions/`),
     substitute: (
@@ -397,7 +498,9 @@ export const api = {
     sessions: {
       list: () => request<WorkoutSession[]>('/api/training/sessions/'),
       get: (id: number) => request<WorkoutSessionDetail>(`/api/training/sessions/${id}/`),
-      create: (data: { day: number; week_number: number; performed_on?: string; notes?: string }) =>
+      // Idempotent per day: reopening a workout returns the session it
+      // already has instead of forking a second one.
+      create: (data: { day: number }) =>
         request<WorkoutSession>('/api/training/sessions/', {
           method: 'POST',
           body: JSON.stringify(data),

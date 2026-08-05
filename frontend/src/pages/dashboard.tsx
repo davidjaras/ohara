@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, Dumbbell } from 'lucide-react'
-import { api, type Program, type Stats, type TrainingProfile } from '@/lib/api'
+import { Check, ChevronRight, Dumbbell } from 'lucide-react'
+import { api, type ProgramRun, type ScheduledDay, type Stats } from '@/lib/api'
 import { METRIC_ESTUDIO } from '@/lib/constants'
-import { formatMinutes } from '@/lib/format'
+import { formatMinutes, formatShortDate, todayISO } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CumulativeWeekChart, WeeklyChart } from '@/components/charts'
 import { RangeSelect } from '@/components/range-select'
@@ -17,36 +19,136 @@ import { WeekList } from '@/components/week-list'
 // 26/52 give the half-year and full-year picture.
 const WEEK_RANGES = [4, 12, 26, 52]
 
-/** Entry point to the active training program. Renders only when the module
- *  is enabled — with it off the dashboard is exactly the study dashboard. */
-function TrainingCard({ training }: { training: TrainingProfile }) {
+/** The workouts of the current plan week, done ones marked. */
+function WeekStrip({ days, activeDayId }: { days: ScheduledDay[]; activeDayId: number | null }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {days.map((entry) => (
+        <span
+          key={entry.day.id}
+          className={cn(
+            'flex items-center gap-1 rounded px-1.5 py-0.5 text-xs',
+            entry.done
+              ? 'bg-primary/15 text-primary'
+              : entry.day.id === activeDayId
+                ? 'bg-accent font-medium text-foreground'
+                : 'bg-accent text-muted-foreground',
+          )}
+        >
+          {entry.done && <Check className="size-3" />}
+          {entry.day.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The plan in progress: which week, what this week looks like, and one tap
+ * into the workout to do now. With no plan it is the entry point to pick one.
+ * Renders only when the module is enabled — with it off the dashboard is
+ * exactly the study dashboard.
+ */
+function TrainingCard() {
   const { t } = useTranslation()
-  const [programs, setPrograms] = useState<Program[]>([])
+  const [run, setRun] = useState<ProgramRun | null | undefined>(undefined)
+  const [finishing, setFinishing] = useState(false)
+  const [dismissedEnd, setDismissedEnd] = useState(false)
 
   useEffect(() => {
-    api.training.programs().then(setPrograms, () => {})
+    api.training.runs.active().then(setRun, () => setRun(null))
   }, [])
 
-  const activeProgram = programs.find((p) => p.slug === training.active_program)
+  const finishPlan = () => {
+    if (!run) return
+    setFinishing(true)
+    api.training.runs.update(run.id, { status: 'completed' }).then(
+      () => setRun(null),
+      () => setFinishing(false),
+    )
+  }
+
+  if (run === undefined) return null
+
+  if (!run) {
+    return (
+      <Card>
+        <Link to="/training" className="block transition-colors hover:bg-accent/40">
+          <CardHeader className="flex items-center gap-3">
+            <div className="rounded-md bg-accent p-2">
+              <Dumbbell className="size-5 text-primary" />
+            </div>
+            <div className="grid min-w-0 flex-1 gap-1">
+              <CardTitle>{t('training.cardTitle')}</CardTitle>
+              <CardDescription>{t('training.cardNone')}</CardDescription>
+            </div>
+            <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+          </CardHeader>
+        </Link>
+      </Card>
+    )
+  }
+
+  const active = run.active_day ?? null
+  const weekDays = (run.schedule ?? []).filter((e) => e.plan_week === run.plan_week)
+  const isToday = active?.scheduled_on === todayISO()
+  const pending = (run.adherence?.planned ?? 0) - (run.adherence?.done ?? 0)
+  // Past the end date the plan is not closed behind your back: it asks.
+  const isOver = run.ends_on < todayISO() && !dismissedEnd
+
+  const dayHref = active
+    ? `/training/day/${active.day.id}?program=${run.program.slug}`
+    : `/training/${run.program.slug}`
 
   return (
     <Card>
-      <Link to="/training" className="block transition-colors hover:bg-accent/40">
+      <Link to={dayHref} className="block transition-colors hover:bg-accent/40">
         <CardHeader className="flex items-center gap-3">
           <div className="rounded-md bg-accent p-2">
             <Dumbbell className="size-5 text-primary" />
           </div>
           <div className="grid min-w-0 flex-1 gap-1">
-            <CardTitle>{t('training.cardTitle')}</CardTitle>
+            <CardTitle className="truncate">{run.program.name}</CardTitle>
             <CardDescription className="truncate">
-              {activeProgram
-                ? t('training.cardActive', { name: activeProgram.name })
-                : t('training.cardNone')}
+              {t('training.cardWeekOf', {
+                week: run.plan_week,
+                total: run.total_weeks,
+              })}
+              {active &&
+                ` · ${t(isToday ? 'training.cardToday' : 'training.cardNext')}: ${active.day.name}`}
+              {!active && ` · ${t('training.cardRestDay')}`}
             </CardDescription>
           </div>
           <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
         </CardHeader>
       </Link>
+      {(weekDays.length > 0 || isOver) && (
+        <CardContent className="grid gap-3">
+          {weekDays.length > 0 && (
+            <WeekStrip days={weekDays} activeDayId={active?.day.id ?? null} />
+          )}
+          {isOver && (
+            <div className="grid gap-2">
+              <p className="text-sm text-muted-foreground">
+                {pending > 0
+                  ? t('training.cardPlanOverPending', {
+                      date: formatShortDate(run.ends_on),
+                      count: pending,
+                    })
+                  : t('training.cardPlanOver', { date: formatShortDate(run.ends_on) })}
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={finishPlan} disabled={finishing}>
+                  {t('training.cardFinishPlan')}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setDismissedEnd(true)}>
+                  {t('training.cardKeepGoing')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      )}
     </Card>
   )
 }
@@ -89,7 +191,7 @@ export function DashboardPage() {
         onResolved={handleSessionSaved}
       />
       <TimerCard metric={METRIC_ESTUDIO} onSessionSaved={handleSessionSaved} />
-      {training && <TrainingCard training={training} />}
+      {training && <TrainingCard />}
 
       {stats && (
         <>

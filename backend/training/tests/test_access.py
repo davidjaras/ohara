@@ -7,6 +7,8 @@ import pytest
 
 from training.models import (
     ExerciseSlot,
+    ProgramAccess,
+    ProgramRun,
     ProgramVariant,
     SetLog,
     TrainingProfile,
@@ -25,6 +27,9 @@ def training_endpoints(program, day, slot, session):
         f"/api/training/slots/{slot.pk}/substitutions/",
         "/api/training/sessions/",
         f"/api/training/sessions/{session.pk}/",
+        "/api/training/runs/",
+        "/api/training/runs/active/",
+        f"/api/training/exercises/{slot.exercise.pk}/history/",
     ]
 
 
@@ -84,9 +89,6 @@ def test_user_cannot_read_or_write_another_users_sessions_or_logs(
 ):
     # Give B the module and the same program access as A: ownership, not
     # program access, is what must protect A's data.
-    ProgramVariant.objects.get(program=glute_coach)
-    from training.models import ProgramAccess
-
     TrainingProfile.objects.create(user=other_user, enabled=True)
     ProgramAccess.objects.create(user=other_user, program=glute_coach)
     slot = ExerciseSlot.objects.get(
@@ -126,16 +128,56 @@ def test_user_cannot_read_or_write_another_users_sessions_or_logs(
     assert session.completed_at is None
 
 
-def test_cannot_set_active_variant_of_program_without_access(
+def test_cannot_start_a_run_on_a_program_without_access(
     client, user, enabled_profile, challenge
 ):
     foreign_variant = ProgramVariant.objects.get(program=challenge)
 
-    response = client.put(
-        "/api/training/profile/",
-        {"active_variant": foreign_variant.pk},
+    response = client.post(
+        "/api/training/runs/",
+        {"variant": foreign_variant.pk},
         format="json",
     )
     assert response.status_code == 404
-    user.training_profile.refresh_from_db()
-    assert user.training_profile.active_variant is None
+    assert not ProgramRun.objects.filter(user=user).exists()
+
+
+def test_user_cannot_read_another_users_runs(
+    client, other_client, other_user, run, glute_coach
+):
+    """B has the module and even the same program access; the run is still A's."""
+    TrainingProfile.objects.create(user=other_user, enabled=True)
+    ProgramAccess.objects.create(user=other_user, program=glute_coach)
+
+    assert other_client.get(f"/api/training/runs/{run.pk}/").status_code == 404
+    assert (
+        other_client.patch(
+            f"/api/training/runs/{run.pk}/", {"status": "abandoned"}, format="json"
+        ).status_code
+        == 404
+    )
+    run.refresh_from_db()
+    assert run.status == "active"
+
+    assert other_client.get("/api/training/runs/").json() == []
+    assert other_client.get("/api/training/runs/active/").status_code == 204
+
+
+def test_exercise_history_never_shows_another_users_logs(
+    client, other_client, other_user, glute_coach, session
+):
+    """The catalogue is global; what was lifted on it is not."""
+    TrainingProfile.objects.create(user=other_user, enabled=True)
+    ProgramAccess.objects.create(user=other_user, program=glute_coach)
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    SetLog.objects.create(
+        session=session, performed_exercise=slot.exercise, set_number=1, reps=10
+    )
+
+    mine = client.get(f"/api/training/exercises/{slot.exercise.pk}/history/").json()
+    assert len(mine["sessions"]) == 1
+
+    theirs = other_client.get(
+        f"/api/training/exercises/{slot.exercise.pk}/history/"
+    ).json()
+    assert theirs["sessions"] == []

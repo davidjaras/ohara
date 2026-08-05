@@ -178,3 +178,59 @@ lo ofrece durante la gracia, cuesta una acción y pesa lo mismo que finalizar,
 porque una meta de duración no debe volverse techo. Las notificaciones del
 navegador son refuerzo puro (una por fase, permiso pedido al guardar el
 recordatorio en ajustes); la corrección del dato nunca depende de ellas.
+
+## Activar un programa es empezar un plan con fechas
+
+Hasta ahora "activar" era una etiqueta: `TrainingProfile.active_variant` decía
+*qué* programa habías elegido y nada decía *desde cuándo* ni *hasta cuándo*.
+Ninguna pantalla sabía en qué fase, semana o día estabas, así que todas se lo
+preguntaban al usuario. `ProgramRun` (usuario, variante, `started_on`, estado)
+convierte esa elección en un compromiso con fechas reales, y pasa a ser la
+única fuente de verdad: `active_variant` se eliminó en vez de quedar como
+columna muerta, y el endpoint del perfil sigue devolviéndola derivada del run
+para no romper a nadie.
+
+**Anclaje al lunes.** Los cinco programas nombran sus días `MONDAY`..`SATURDAY`
+(nunca domingo) en el 100 % de las filas, y el resto de Ohara ya cuenta semanas
+ISO. Un run empieza siempre en un lunes — cualquier fecha se ajusta hacia atrás
+a su lunes, en el cliente y en el servidor — y cada día cae en el día de la
+semana que escribió el coach. La posición absoluta de una semana se calcula
+enumerando las semanas que existen, no sumando `Phase.weeks_count`: Glute Coach
+sintetiza las suyas y los dos números podrían separarse.
+
+**Las fechas no se mueven.** Faltar a un entrenamiento nunca corre el
+calendario: la semana 3 empieza en su fecha se haya hecho o no la 2, los días
+sin registrar quedan pendientes y lo que se muestra es la adherencia
+(`Semana 2 · 3/5`). Extender el plan automáticamente al primer fallo convierte
+la fecha de fin en una promesa que se renegocia sola; es más honesto que el
+plan aguante y el número diga la verdad. El día activo del dashboard es el de
+hoy si está pendiente, si no el más atrasado *de la semana en curso* — ponerse
+al día el miércoles con lo del martes es normal, arrastrar la semana 1 durante
+dieciséis no.
+
+**Fuera de plan se registra igual.** Un día de otro programa, o de una semana
+muy posterior, se puede registrar: la sesión queda con `run = null`, marcada
+"fuera de plan", fuera de la adherencia y dentro del historial. Bloquearlo
+solo obligaría a mentirle a la app para poder entrenar.
+
+**Un día, una sesión.** `WorkoutSession` era creada sin comprobar nada en el
+primer set de cada visita, así que reabrir un entrenamiento lo duplicaba —
+había cuatro filas para el 2026-08-04 en la base de desarrollo. La restricción
+`uniq_run_day` más un `get_or_create` lo cierran; Postgres trata los NULL como
+distintos, así que las sesiones fuera de plan siguen sin restricción, que es
+justo lo que se quiere. La migración de datos fusiona los duplicados que ya
+existían en la sesión más completa.
+
+**El día viaja con lo registrado.** `GET /api/training/days/<pk>/` devolvía la
+prescripción y nada más, así que reabrir un día terminado pintaba un formulario
+en blanco: el cliente no tenía forma de pedir su sesión. Ahora el mismo payload
+trae la sesión con sus logs, la fecha agendada y, por slot, la última vez que
+se hizo ese ejercicio — una consulta por ejercicio del día, no una por serie.
+
+**"Última vez" excluye la sesión abierta**, o la línea repetiría lo que acabas
+de escribir. El peso de la última vez es *placeholder*, nunca valor precargado:
+las reps sí se precargan con el objetivo del coach, pero marcar una serie no
+puede registrar una carga que nadie eligió. Las filas importadas no tienen
+fecha, y como Postgres ordena los NULL primero en `DESC`, todo el orden por
+`performed_on` va con `nulls_last`: sin eso un registro de 2023 sin fecha
+aparecía como "la última vez" por encima del entrenamiento de ayer.
