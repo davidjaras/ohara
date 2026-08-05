@@ -1,15 +1,24 @@
 from django import forms
 from django.contrib import admin
 
-from .models import Program, ProgramAccess, TrainingProfile
+from .models import Program, ProgramAccess, ProgramRun, TrainingProfile
 
 
 @admin.register(TrainingProfile)
 class TrainingProfileAdmin(admin.ModelAdmin):
-    """The only interface for enabling the module and picking a variant."""
+    """The only interface for enabling the module for a user."""
 
-    list_display = ["user", "enabled", "active_variant", "weight_unit"]
+    list_display = ["user", "enabled", "weight_unit"]
     list_filter = ["enabled"]
+
+
+@admin.register(ProgramRun)
+class ProgramRunAdmin(admin.ModelAdmin):
+    """Read-mostly: runs are started from the app, not from here."""
+
+    list_display = ["user", "variant", "started_on", "status", "ended_on"]
+    list_filter = ["status"]
+    date_hierarchy = "started_on"
 
 
 class ProgramAccessAddForm(forms.ModelForm):

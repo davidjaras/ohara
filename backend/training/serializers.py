@@ -6,7 +6,9 @@ from .models import (
     ExerciseSubstitution,
     Phase,
     Program,
+    ProgramRun,
     ProgramVariant,
+    RunStatus,
     SetLog,
     SetPrescription,
     Week,
@@ -38,16 +40,61 @@ class SetPrescriptionSerializer(serializers.ModelSerializer):
         ]
 
 
+class PerformanceSerializer(serializers.ModelSerializer):
+    """One past session, reduced to the sets of a single exercise.
+
+    Feeds both the "última vez" line on the day screen and the full history
+    dialog, so they can never disagree. `exercise_logs` is the prefetch
+    services._history_sessions attaches.
+    """
+
+    day_name = serializers.CharField(source="day.name", read_only=True)
+    program = serializers.CharField(
+        source="day.week.phase.variant.program.name", read_only=True
+    )
+    sets = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkoutSession
+        fields = ["id", "performed_on", "day_name", "program", "sets"]
+
+    def get_sets(self, session):
+        logs = getattr(session, "exercise_logs", None)
+        if logs is None:
+            logs = session.logs.all()
+        return [
+            {
+                "set_number": log.set_number,
+                # A string, like SetLogSerializer's DecimalField: the two shapes
+                # end up side by side in the same UI row.
+                "weight": None if log.weight is None else str(log.weight),
+                "weight_basis": log.weight_basis,
+                "reps": log.reps,
+                "was_substituted": log.was_substituted,
+            }
+            for log in logs
+        ]
+
+
 class ExerciseSlotSerializer(serializers.ModelSerializer):
     exercise = ExerciseSerializer(read_only=True)
     sets = SetPrescriptionSerializer(many=True, read_only=True)
+    # Filled by DayDetailView from a single lookup per exercise; None when the
+    # exercise has never been logged.
+    last_performance = serializers.SerializerMethodField()
 
     class Meta:
         model = ExerciseSlot
         fields = [
             "id", "order", "series_label", "series_position", "is_superset",
             "coach_annotation", "modifiers", "exercise", "sets",
+            "last_performance",
         ]
+
+    def get_last_performance(self, slot):
+        performances = self.context.get("last_performances") or {}
+        session = performances.get(slot.exercise_id)
+        return PerformanceSerializer(session).data if session else None
 
 
 class WorkoutDaySerializer(serializers.ModelSerializer):
@@ -57,10 +104,42 @@ class WorkoutDaySerializer(serializers.ModelSerializer):
 
 
 class WorkoutDayDetailSerializer(WorkoutDaySerializer):
+    """The day screen's whole payload: prescription, where it sits in the
+    plan, and the session already logged against it (problem the old shape
+    could not express — it returned the prescription and nothing else)."""
+
     slots = ExerciseSlotSerializer(many=True, read_only=True)
+    week_number = serializers.IntegerField(source="week.number", read_only=True)
+    phase_number = serializers.IntegerField(source="week.phase.number", read_only=True)
+    # The id, not the number: it is what /training/<slug>/phase/<id> routes on,
+    # so the day screen can rebuild its own back link.
+    phase = serializers.IntegerField(source="week.phase_id", read_only=True)
+    program_slug = serializers.CharField(
+        source="week.phase.variant.program.slug", read_only=True
+    )
+    scheduled_on = serializers.SerializerMethodField()
+    plan_week = serializers.SerializerMethodField()
+    in_active_plan = serializers.SerializerMethodField()
+    session = serializers.SerializerMethodField()
 
     class Meta(WorkoutDaySerializer.Meta):
-        fields = WorkoutDaySerializer.Meta.fields + ["slots"]
+        fields = WorkoutDaySerializer.Meta.fields + [
+            "week_number", "phase_number", "phase", "program_slug",
+            "scheduled_on", "plan_week", "in_active_plan", "session", "slots",
+        ]
+
+    def get_scheduled_on(self, day):
+        return self.context.get("scheduled_on")
+
+    def get_plan_week(self, day):
+        return self.context.get("plan_week")
+
+    def get_in_active_plan(self, day):
+        return bool(self.context.get("in_active_plan"))
+
+    def get_session(self, day):
+        session = self.context.get("session")
+        return WorkoutSessionDetailSerializer(session).data if session else None
 
 
 class WeekSerializer(serializers.ModelSerializer):
@@ -83,9 +162,18 @@ class PhaseSerializer(serializers.ModelSerializer):
 
 
 class ProgramVariantSerializer(serializers.ModelSerializer):
+    # How long committing to this routine actually is. A COUNT over a handful
+    # of rows, and the plan's end date cannot be shown without it.
+    total_weeks = serializers.SerializerMethodField()
+
     class Meta:
         model = ProgramVariant
-        fields = ["id", "slug", "days_per_week", "environment"]
+        fields = ["id", "slug", "days_per_week", "environment", "total_weeks"]
+
+    def get_total_weeks(self, variant) -> int:
+        from . import services
+
+        return services.total_weeks(variant)
 
 
 class ProgramVariantDetailSerializer(ProgramVariantSerializer):
@@ -112,8 +200,53 @@ class ProgramDetailSerializer(serializers.ModelSerializer):
 
 
 class ProfileSerializer(serializers.Serializer):
-    active_variant = serializers.IntegerField(allow_null=True, required=False)
+    """The profile only carries preferences now; starting a plan is
+    POST /runs/, which needs a date the profile has nowhere to put."""
+
     weight_unit = serializers.CharField(max_length=3, required=False)
+
+
+class ProgramRunSerializer(serializers.ModelSerializer):
+    variant = ProgramVariantSerializer(read_only=True)
+    program = ProgramSerializer(source="variant.program", read_only=True)
+    ends_on = serializers.DateField(read_only=True)
+    total_weeks = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = ProgramRun
+        fields = [
+            "id", "program", "variant", "started_on", "ends_on", "total_weeks",
+            "status", "ended_on",
+        ]
+
+
+class ScheduledDaySerializer(serializers.Serializer):
+    """One row of a run's calendar: a day of the variant on a real date."""
+
+    day = WorkoutDaySerializer(read_only=True)
+    plan_week = serializers.IntegerField(read_only=True)
+    scheduled_on = serializers.DateField(read_only=True)
+    done = serializers.BooleanField(read_only=True)
+    started = serializers.BooleanField(read_only=True)
+    session_id = serializers.SerializerMethodField()
+
+    def get_session_id(self, entry):
+        session = entry.get("session")
+        return session.pk if session else None
+
+
+class RunStartSerializer(serializers.Serializer):
+    variant = serializers.IntegerField()
+    # Any date is accepted and snapped back to its ISO Monday: weeks are real
+    # weeks, so a plan cannot start on a Wednesday.
+    started_on = serializers.DateField(required=False, allow_null=True)
+
+
+class RunUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=[RunStatus.COMPLETED, RunStatus.ABANDONED], required=False
+    )
+    started_on = serializers.DateField(required=False)
 
 
 class SubstitutionInputSerializer(serializers.Serializer):
@@ -137,24 +270,37 @@ class SetLogSerializer(serializers.ModelSerializer):
     performed_exercise = serializers.SlugRelatedField(
         read_only=True, slug_field="name"
     )
+    # The client keys its rows by slot + set number; without this it would have
+    # to resolve prescription → slot by walking the day tree itself.
+    slot = serializers.SerializerMethodField()
 
     class Meta:
         model = SetLog
         fields = [
-            "id", "prescription", "performed_exercise", "was_substituted",
+            "id", "slot", "prescription", "performed_exercise", "was_substituted",
             "set_number", "weight", "weight_basis", "reps", "rpe", "rir",
             "import_note",
         ]
 
+    def get_slot(self, log):
+        return log.prescription.slot_id if log.prescription_id else None
+
 
 class WorkoutSessionSerializer(serializers.ModelSerializer):
     day = WorkoutDaySerializer(read_only=True)
+    # A session with no run was trained outside the active plan (or imported):
+    # it counts for exercise history and never for a plan's adherence.
+    off_plan = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkoutSession
         fields = [
-            "id", "day", "week_number", "performed_on", "completed_at", "notes",
+            "id", "day", "run", "off_plan", "week_number", "performed_on",
+            "completed_at", "notes",
         ]
+
+    def get_off_plan(self, session):
+        return session.run_id is None
 
 
 class WorkoutSessionDetailSerializer(WorkoutSessionSerializer):
@@ -170,10 +316,10 @@ class SessionUpdateSerializer(serializers.Serializer):
 
 
 class SessionInputSerializer(serializers.Serializer):
+    """`week_number` is no longer asked for: the day already knows which week
+    of which phase it belongs to, and the run knows the date."""
+
     day = serializers.IntegerField()
-    week_number = serializers.IntegerField(min_value=1)
-    performed_on = serializers.DateField(required=False, allow_null=True)
-    notes = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class SetLogInputSerializer(serializers.Serializer):

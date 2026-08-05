@@ -1,38 +1,29 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import { ArrowLeft, ChevronRight } from 'lucide-react'
-import { api, type ProgramVariant } from '@/lib/api'
+import { formatShortDate } from '@/lib/format'
+import { routineLabel } from '@/lib/routine'
 import { useProgramDetail } from '@/lib/use-program'
+import { useActiveRun, useSchedule } from '@/lib/use-run'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useLayoutContext } from '@/components/layout'
-
-/** "4 días/semana · gimnasio" — the routine described by what it asks of you. */
-function routineLabel(variant: ProgramVariant, t: TFunction) {
-  const parts: string[] = []
-  if (variant.days_per_week) {
-    parts.push(t('training.routineDays', { count: variant.days_per_week }))
-  }
-  if (variant.environment === 'gym') parts.push(t('training.envGym'))
-  if (variant.environment === 'home') parts.push(t('training.envHome'))
-  return parts.length > 0 ? parts.join(' · ') : variant.slug
-}
+import { StartPlanDialog } from '@/components/start-plan-dialog'
 
 /** Second screen: pick the routine, then walk into a phase. */
 export function TrainingProgramPage() {
   const { t } = useTranslation()
   const { slug } = useParams()
-  const [searchParams] = useSearchParams()
-  const mustPick = searchParams.get('pick') === '1'
-  const { training, refreshTraining } = useLayoutContext()
+  const { refreshTraining } = useLayoutContext()
   const { detail, error: loadError } = useProgramDetail(slug)
+  const { run, refresh: refreshRun } = useActiveRun()
+  const schedule = useSchedule(run, slug)
   const [viewedVariantId, setViewedVariantId] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [starting, setStarting] = useState(false)
 
-  const activeVariantId = training?.active_variant?.id ?? null
+  const activeVariantId = run?.variant.id ?? null
 
   // Default to the active routine when it belongs to this program; browsing
   // another one never changes what is active — that takes the button below.
@@ -45,14 +36,6 @@ export function TrainingProgramPage() {
       null
     )
   }, [detail, viewedVariantId, activeVariantId])
-
-  const activateRoutine = (variantId: number) => {
-    setError(null)
-    api.training.updateProfile({ active_variant: variantId }).then(
-      () => refreshTraining(),
-      (e: Error) => setError(e.message),
-    )
-  }
 
   if (loadError) {
     return <p className="py-10 text-center text-sm text-destructive">{loadError}</p>
@@ -81,15 +64,11 @@ export function TrainingProgramPage() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
       {hasRoutines && (
-        <Card className={cn(mustPick && 'ring-2 ring-primary')}>
+        <Card>
           <CardHeader>
             <CardTitle>{t('training.routineTitle')}</CardTitle>
-            <CardDescription>
-              {mustPick ? t('training.pickRoutine') : t('training.routineDescription')}
-            </CardDescription>
+            <CardDescription>{t('training.routineDescription')}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
             {detail.variants.map((variant) => (
@@ -114,7 +93,9 @@ export function TrainingProgramPage() {
             ))}
             {viewedVariant && viewedVariant.id !== activeVariantId && (
               <div className="pt-1">
-                <Button size="sm" onClick={() => activateRoutine(viewedVariant.id)}>
+                {/* Using a routine now means starting a plan on a date, so it
+                    opens the same dialog as the program list. */}
+                <Button size="sm" onClick={() => setStarting(true)}>
                   {t('training.useRoutine')}
                 </Button>
               </div>
@@ -131,33 +112,63 @@ export function TrainingProgramPage() {
 
       {viewedVariant && viewedVariant.phases.length > 0 && (
         <div className="grid gap-2">
-          {viewedVariant.phases.map((phase) => (
-            <Card key={phase.id}>
-              <Link
-                to={`/training/${detail.slug}/phase/${phase.id}`}
-                className="block transition-colors hover:bg-accent/40"
-              >
-                <CardHeader className="flex items-center gap-3">
-                  <div className="grid min-w-0 flex-1 gap-1">
-                    <CardTitle>
-                      {t('training.phase', { number: phase.number })}
-                      {phase.label && (
-                        <span className="ml-2 font-normal text-muted-foreground">
-                          {phase.label}
-                        </span>
-                      )}
-                    </CardTitle>
-                    <CardDescription>
-                      {t('training.weeksCount', { count: phase.weeks.length })}
-                    </CardDescription>
-                  </div>
-                  <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-                </CardHeader>
-              </Link>
-            </Card>
-          ))}
+          {viewedVariant.phases.map((phase) => {
+            const dates = phase.weeks
+              .flatMap((week) => week.days)
+              .map((day) => schedule.get(day.id)?.scheduled_on)
+              .filter((date): date is string => date !== undefined)
+              .sort()
+            const range =
+              dates.length > 0
+                ? t('training.planDates', {
+                    start: formatShortDate(dates[0]),
+                    end: formatShortDate(dates[dates.length - 1]),
+                  })
+                : null
+
+            return (
+              <Card key={phase.id}>
+                <Link
+                  to={`/training/${detail.slug}/phase/${phase.id}`}
+                  className="block transition-colors hover:bg-accent/40"
+                >
+                  <CardHeader className="flex items-center gap-3">
+                    <div className="grid min-w-0 flex-1 gap-1">
+                      <CardTitle>
+                        {t('training.phase', { number: phase.number })}
+                        {phase.label && (
+                          <span className="ml-2 font-normal text-muted-foreground">
+                            {phase.label}
+                          </span>
+                        )}
+                      </CardTitle>
+                      <CardDescription className="truncate">
+                        {[t('training.weeksCount', { count: phase.weeks.length }), range]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </CardDescription>
+                    </div>
+                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                  </CardHeader>
+                </Link>
+              </Card>
+            )
+          })}
         </div>
       )}
+
+      <StartPlanDialog
+        program={starting ? detail : null}
+        initialVariantId={viewedVariant?.id ?? null}
+        currentRun={run}
+        onClose={() => setStarting(false)}
+        onStarted={() => {
+          setStarting(false)
+          refreshTraining()
+          // The run is what dates this very screen, so pull it again.
+          refreshRun()
+        }}
+      />
     </div>
   )
 }

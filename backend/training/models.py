@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -49,6 +48,12 @@ class RestRole(models.TextChoices):
 class SubstitutionScope(models.TextChoices):
     SESSION = "session", "This session only"
     PROGRAM = "program", "Whole program"
+
+
+class RunStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
+    ABANDONED = "abandoned", "Abandoned"
 
 
 class WeightBasis(models.TextChoices):
@@ -114,8 +119,8 @@ class Exercise(models.Model):
 
 
 class Program(models.Model):
-    # No is_active here: which program is active is per user and lives in
-    # TrainingProfile.active_variant.
+    # No is_active here: which program is active is per user and lives in the
+    # user's active ProgramRun.
     slug = models.SlugField(unique=True)
     name = models.CharField(max_length=200)
     coach = models.CharField(max_length=100, blank=True)
@@ -271,19 +276,11 @@ class TrainingProfile(models.Model):
         on_delete=models.CASCADE,
     )
     enabled = models.BooleanField(default=False)
-
-    # The user picks what they're doing. Points at a VARIANT, not a Program:
-    # Challenge 2025 has 6 variants and we need to know which one is running.
-    active_variant = models.ForeignKey(
-        ProgramVariant, null=True, blank=True, on_delete=models.SET_NULL
-    )
     weight_unit = models.CharField(max_length=3, default="kg")
 
-    def clean(self):
-        if self.active_variant and not ProgramAccess.objects.filter(
-            user=self.user, program=self.active_variant.program
-        ).exists():
-            raise ValidationError("Active program is not among the granted ones.")
+    # What the user is doing is NOT here: it is the active ProgramRun, which
+    # also knows when it started and when it ends. A duplicate pointer on the
+    # profile would be a second source of truth for the same question.
 
     def __str__(self) -> str:
         return f"{self.user} (enabled={self.enabled})"
@@ -313,12 +310,62 @@ class ProgramAccess(models.Model):
         return f"{self.user} → {self.program}"
 
 
+class ProgramRun(models.Model):
+    """A commitment to run one variant from a start date to an end date.
+
+    Activating a program is not a label, it is a plan: the run anchors every
+    WorkoutDay of the variant to a real date, so "which day am I on" stops
+    being a question the UI has to ask the user.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="program_runs",
+        on_delete=models.CASCADE,
+    )
+    variant = models.ForeignKey(ProgramVariant, on_delete=models.PROTECT)
+    # Always an ISO Monday: every program names its days MONDAY..SATURDAY and
+    # the rest of Ohara counts Monday-start weeks. services.start_run snaps it.
+    started_on = models.DateField()
+    status = models.CharField(
+        max_length=10, choices=RunStatus.choices, default=RunStatus.ACTIVE
+    )
+    # Stamped when the run stops, whether it was finished or dropped. The
+    # scheduled end date is derived from started_on and the variant's length.
+    ended_on = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_on", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(status=RunStatus.ACTIVE),
+                name="uniq_active_run",
+            ),
+        ]
+        indexes = [models.Index(fields=["user", "-started_on"])]
+
+    def __str__(self) -> str:
+        return f"{self.user} → {self.variant} from {self.started_on}"
+
+
 class WorkoutSession(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="workout_sessions",
         on_delete=models.CASCADE,
         db_index=True,
+    )
+    # Null means off-plan: a day trained outside the active run, or a row from
+    # the historical import. Those keep counting for exercise history and never
+    # count for a plan's adherence.
+    run = models.ForeignKey(
+        ProgramRun,
+        related_name="sessions",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
     )
     day = models.ForeignKey(WorkoutDay, on_delete=models.PROTECT)
     week_number = models.PositiveSmallIntegerField()  # the REAL week being run
@@ -332,8 +379,17 @@ class WorkoutSession(models.Model):
     imported_from = models.CharField(max_length=40, blank=True, db_index=True)
 
     class Meta:
-        ordering = ["-performed_on", "-id"]
+        # Newest first, with the undated historical import last rather than
+        # first: Postgres sorts NULLs before everything in DESC, which would
+        # rank a 2023 imported row above yesterday's workout.
+        ordering = [models.F("performed_on").desc(nulls_last=True), "-id"]
         indexes = [models.Index(fields=["user", "-performed_on"])]
+        constraints = [
+            # A day appears once in a plan, so it gets one session in that run.
+            # Postgres treats NULLs as distinct, which leaves off-plan sessions
+            # (run=None) unconstrained — exactly what we want.
+            models.UniqueConstraint(fields=["run", "day"], name="uniq_run_day"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user} {self.day.name} week {self.week_number}"

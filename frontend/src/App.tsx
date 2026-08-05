@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { Layout } from '@/components/layout'
 import { DashboardPage } from '@/pages/dashboard'
 import { HistoryPage } from '@/pages/history'
@@ -11,16 +11,13 @@ import { WeightPage } from '@/pages/weight'
 import { BrandPreview } from '@/pages/BrandPreview'
 
 /**
- * The day is the one legacy path that carried a query param, and the week it
- * names ends up on the WorkoutSession — so the redirect translates it instead
- * of dropping it.
+ * The day is the one legacy path that carried a query param. Its week no
+ * longer goes anywhere — the day itself knows which week of which phase it is,
+ * and the plan knows the date — so the redirect just drops it.
  */
 function LegacyDayRedirect() {
   const { dayId } = useParams()
-  const [searchParams] = useSearchParams()
-  const week = searchParams.get('semana')
-  const query = week ? `?week=${week}` : ''
-  return <Navigate to={`/training/day/${dayId}${query}`} replace />
+  return <Navigate to={`/training/day/${dayId}`} replace />
 }
 
 export default function App() {

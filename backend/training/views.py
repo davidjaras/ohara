@@ -6,14 +6,19 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
-from .models import Exercise, ExerciseSubstitution, SetLog, SetPrescription, WorkoutSession
+from .models import Exercise, ExerciseSubstitution, RunStatus, SetLog, SetPrescription
 from .permissions import TrainingEnabled
 from .serializers import (
     ExerciseSerializer,
+    PerformanceSerializer,
     ProfileSerializer,
     ProgramDetailSerializer,
+    ProgramRunSerializer,
     ProgramSerializer,
     ProgramVariantSerializer,
+    RunStartSerializer,
+    RunUpdateSerializer,
+    ScheduledDaySerializer,
     SessionInputSerializer,
     SessionUpdateSerializer,
     SetLogInputSerializer,
@@ -33,17 +38,24 @@ class TrainingView(APIView):
 
 
 class ProfileView(TrainingView):
-    """The user's training profile: active variant and weight unit."""
+    """Preferences, plus a read-only view of what the user is running.
+
+    `active_variant` / `active_program` are derived from the active run rather
+    than stored: the run is the single answer to "what am I doing", and it is
+    the only one that also knows since when.
+    """
 
     def get(self, request):
         profile = request.user.training_profile
-        variant = profile.active_variant
+        run = services.active_run(request.user)
+        variant = run.variant if run else None
         return Response(
             {
                 "active_variant": (
                     ProgramVariantSerializer(variant).data if variant else None
                 ),
                 "active_program": variant.program.slug if variant else None,
+                "active_run": run.pk if run else None,
                 "weight_unit": profile.weight_unit,
             }
         )
@@ -54,16 +66,6 @@ class ProfileView(TrainingView):
         profile = request.user.training_profile
         data = serializer.validated_data
 
-        if "active_variant" in data:
-            variant_id = data["active_variant"]
-            if variant_id is None:
-                profile.active_variant = None
-            else:
-                # 404, not 400: a variant of a program without access does
-                # not exist for this user.
-                profile.active_variant = get_object_or_404(
-                    services.accessible_variants(request.user), pk=variant_id
-                )
         if "weight_unit" in data:
             profile.weight_unit = data["weight_unit"]
         profile.save()
@@ -89,15 +91,156 @@ class ProgramDetailView(TrainingView):
         return Response(ProgramDetailSerializer(program).data)
 
 
+def run_payload(run, today):
+    """A run plus everything the client needs to draw its calendar."""
+    schedule = services.run_schedule(run)
+    plan_week = services.current_plan_week(run, today)
+    active = services.active_day(schedule, today, plan_week)
+    data = ProgramRunSerializer(run).data
+    data["ends_on"] = services.run_ends_on(run)
+    data["total_weeks"] = services.total_weeks(run.variant)
+    data["plan_week"] = plan_week
+    data["adherence"] = services.adherence(schedule)
+    data["schedule"] = ScheduledDaySerializer(schedule, many=True).data
+    data["active_day"] = ScheduledDaySerializer(active).data if active else None
+    return data
+
+
+class RunListView(TrainingView):
+    """The user's plans: at most one active, plus everything already run."""
+
+    def get(self, request):
+        runs = services.own_runs(request.user).select_related("variant__program")
+        today = timezone.localdate()
+        return Response(
+            [
+                run_payload(run, today)
+                if run.status == RunStatus.ACTIVE
+                else {
+                    **ProgramRunSerializer(run).data,
+                    "ends_on": services.run_ends_on(run),
+                    "total_weeks": services.total_weeks(run.variant),
+                }
+                for run in runs
+            ]
+        )
+
+    def post(self, request):
+        serializer = RunStartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        today = timezone.localdate()
+
+        # 404, not 400: a variant of a program without access does not exist
+        # for this user.
+        variant = get_object_or_404(
+            services.accessible_variants(request.user), pk=data["variant"]
+        )
+        run = services.start_run(
+            request.user, variant, data.get("started_on") or today, today
+        )
+        return Response(run_payload(run, today), status=status.HTTP_201_CREATED)
+
+
+class ActiveRunView(TrainingView):
+    """What the dashboard asks for: the plan in progress, or nothing."""
+
+    def get(self, request):
+        run = services.active_run(request.user)
+        if run is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(run_payload(run, timezone.localdate()))
+
+
+class RunDetailView(TrainingView):
+    def get(self, request, pk):
+        run = get_object_or_404(services.own_runs(request.user), pk=pk)
+        return Response(run_payload(run, timezone.localdate()))
+
+    def patch(self, request, pk):
+        run = get_object_or_404(services.own_runs(request.user), pk=pk)
+        serializer = RunUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        today = timezone.localdate()
+
+        if "started_on" in data:
+            services.reschedule_run(run, data["started_on"])
+        if "status" in data:
+            services.finish_run(run, today, data["status"])
+        return Response(run_payload(run, today))
+
+
 class DayDetailView(TrainingView):
+    """Prescription + where the day sits in the plan + what was logged on it.
+
+    The session travels with the day on purpose: reopening a finished workout
+    used to render a blank form because the client had no way to ask for it.
+    """
+
     def get(self, request, pk):
         day = get_object_or_404(
-            services.accessible_days(request.user).prefetch_related(
+            services.accessible_days(request.user)
+            .select_related("week__phase__variant__program")
+            .prefetch_related(
                 "slots__exercise__equipment_required", "slots__sets"
             ),
             pk=pk,
         )
-        return Response(WorkoutDayDetailSerializer(day).data)
+        run = services.active_run(request.user)
+        in_plan = run is not None and day.week.phase.variant_id == run.variant_id
+        session = services.session_for_day(request.user, day, run)
+
+        scheduled_on = plan_week = None
+        if in_plan:
+            plan_week = services.plan_weeks(run.variant)[day.week_id]
+            scheduled_on = services.scheduled_date(run.started_on, plan_week, day)
+
+        slots = list(day.slots.all())
+        performances = services.last_performances(
+            request.user,
+            {slot.exercise for slot in slots},
+            exclude_session=session,
+        )
+        return Response(
+            WorkoutDayDetailSerializer(
+                day,
+                context={
+                    "session": session,
+                    "in_active_plan": in_plan,
+                    "plan_week": plan_week,
+                    "scheduled_on": scheduled_on,
+                    "last_performances": performances,
+                },
+            ).data
+        )
+
+
+class ExerciseHistoryView(TrainingView):
+    """Every time the user performed this exercise, newest first.
+
+    Keyed on SetLog.performed_exercise, so a substituted set counts for what
+    was actually done — including the 13 imported rows where the prescribed
+    and performed exercises differ.
+    """
+
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT = 100
+
+    def get(self, request, pk):
+        exercise = get_object_or_404(Exercise, pk=pk)
+        try:
+            limit = int(request.query_params.get("limit", self.DEFAULT_LIMIT))
+        except ValueError:
+            limit = self.DEFAULT_LIMIT
+        limit = max(1, min(limit, self.MAX_LIMIT))
+        sessions = services.exercise_history(request.user, exercise, limit)
+        return Response(
+            {
+                "exercise": ExerciseSerializer(exercise).data,
+                "sessions": PerformanceSerializer(sessions, many=True).data,
+            }
+        )
 
 
 class SlotSubstitutionsView(TrainingView):
@@ -148,24 +291,29 @@ class SessionListView(TrainingView):
         sessions = services.own_sessions(request.user).select_related(
             "day"
         ).order_by("-performed_on", "-id")
+        day = request.query_params.get("day")
+        if day:
+            sessions = sessions.filter(day_id=day)
         return Response(WorkoutSessionSerializer(sessions, many=True).data)
 
     def post(self, request):
+        """Idempotent: opening the same day twice reuses its session.
+
+        The old unconditional create is what produced duplicate sessions for
+        one day+week every time a workout was reopened.
+        """
         serializer = SessionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
         day = get_object_or_404(
-            services.accessible_days(request.user), pk=data["day"]
+            services.accessible_days(request.user).select_related("week__phase"),
+            pk=serializer.validated_data["day"],
         )
-        session = WorkoutSession.objects.create(
-            user=request.user,
-            day=day,
-            week_number=data["week_number"],
-            performed_on=data.get("performed_on") or timezone.localdate(),
-            notes=data.get("notes", ""),
+        session, created = services.get_or_create_session(
+            request.user, day, timezone.localdate()
         )
         return Response(
-            WorkoutSessionSerializer(session).data, status=status.HTTP_201_CREATED
+            WorkoutSessionSerializer(session).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
 

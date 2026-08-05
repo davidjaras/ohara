@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ArrowLeftRight, Check, Info, Timer } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Check, History, Info, Timer } from 'lucide-react'
 import {
   api,
   type ExerciseSlot,
+  type Performance,
   type SetLog,
   type SetPrescription,
   type Substitution,
@@ -12,6 +13,7 @@ import {
   type WorkoutDayDetail,
   type WorkoutSession,
 } from '@/lib/api'
+import { formatShortDate, formatWeekdayDate, todayISO } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,6 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useLayoutContext } from '@/components/layout'
+import { ExerciseHistoryDialog } from '@/components/exercise-history-dialog'
 import { RestTimer, type RestRequest } from '@/components/rest-timer'
 import { SubstitutionDialog } from '@/components/substitution-dialog'
 
@@ -52,6 +55,50 @@ function memberLabel(slot: ExerciseSlot): string {
 
 function setKey(slot: ExerciseSlot, prescription: SetPrescription): string {
   return `${slot.id}:${prescription.set_number}`
+}
+
+/**
+ * Rebuilds the checked-set map from the session the API sends with the day.
+ * Logs carry their slot, so this needs no walk of the prescription tree; a log
+ * whose prescription was deleted has none and is skipped.
+ */
+function hydrateLogs(detail: WorkoutDayDetail): Map<string, SetLog> {
+  const map = new Map<string, SetLog>()
+  for (const log of detail.session?.logs ?? []) {
+    if (log.slot !== null) map.set(`${log.slot}:${log.set_number}`, log)
+  }
+  return map
+}
+
+/** "40 × 10 · 40 × 10 · 35 × 8" — a past session at a glance. */
+function formatSets(performance: Performance): string {
+  return performance.sets
+    .map((set) => {
+      const weight = set.weight === null ? null : trimWeight(set.weight)
+      const reps = set.reps === null ? '—' : String(set.reps)
+      return weight === null ? reps : `${weight}×${reps}`
+    })
+    .join(' · ')
+}
+
+/** "40.00" reads as 40, "17.50" as 17.5 — trailing zeros are noise on a phone. */
+function trimWeight(weight: string): string {
+  const value = Number(weight)
+  return Number.isFinite(value) ? String(value) : weight
+}
+
+type DayStatus = 'today' | 'late' | 'ahead' | 'offPlan'
+
+/**
+ * Where this workout sits relative to the plan. A day outside the active plan
+ * is still trainable — it just says so, and never counts for adherence.
+ */
+function dayStatus(day: WorkoutDayDetail): DayStatus | null {
+  if (!day.in_active_plan) return 'offPlan'
+  if (!day.scheduled_on) return null
+  const today = todayISO()
+  if (day.scheduled_on === today) return 'today'
+  return day.scheduled_on < today ? 'late' : 'ahead'
 }
 
 /**
@@ -114,19 +161,27 @@ const TABLE_GRID =
 function SetRow({
   prescription,
   log,
+  lastWeight,
   saving,
   onLog,
   onUnlog,
 }: {
   prescription: SetPrescription
   log: SetLog | undefined
+  lastWeight: string | null
   saving: boolean
   onLog: (weight: number | null, reps: number | null) => void
   onUnlog: () => void
 }) {
   const { t } = useTranslation()
-  const [weight, setWeight] = useState('')
-  const [reps, setReps] = useState(() => initialReps(prescription))
+  // Reopened sets show what was logged; the inputs are the row's own state
+  // only while it is unchecked.
+  const [weight, setWeight] = useState(() =>
+    log?.weight != null ? trimWeight(log.weight) : '',
+  )
+  const [reps, setReps] = useState(() =>
+    log?.reps != null ? String(log.reps) : initialReps(prescription),
+  )
   const logged = log !== undefined
 
   const toggle = () => {
@@ -155,6 +210,9 @@ function SetRow({
         inputMode="decimal"
         step="0.5"
         min={0}
+        // Last time's load is a hint, never a prefill: checking a set must not
+        // record a weight that was never chosen.
+        placeholder={lastWeight ?? ''}
         value={weight}
         onChange={(e) => setWeight(e.target.value)}
         disabled={logged}
@@ -193,6 +251,33 @@ function SetRow({
   )
 }
 
+/** "Última vez · 12 jul: 40×10 · 40×10 · 35×8", tappable into the full history. */
+function LastPerformance({
+  performance,
+  onOpen,
+}: {
+  performance: Performance
+  onOpen: () => void
+}) {
+  const { t } = useTranslation()
+  const when = performance.performed_on
+    ? formatShortDate(performance.performed_on)
+    : t('training.historyUndated')
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mt-1 flex w-full items-center gap-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <History className="size-3 shrink-0" />
+      <span className="truncate">
+        {t('training.lastTime', { when, sets: formatSets(performance) })}
+      </span>
+    </button>
+  )
+}
+
 function SlotBlock({
   slot,
   substitution,
@@ -202,6 +287,7 @@ function SlotBlock({
   onSubstitute,
   onOpenRest,
   onOpenTempoLegend,
+  onOpenHistory,
   onLog,
   onUnlog,
 }: {
@@ -213,12 +299,17 @@ function SlotBlock({
   onSubstitute: () => void
   onOpenRest: () => void
   onOpenTempoLegend: () => void
+  onOpenHistory: (exercise: TrainingExercise) => void
   onLog: (prescription: SetPrescription, weight: number | null, reps: number | null) => void
   onUnlog: (prescription: SetPrescription, log: SetLog) => void
 }) {
   const { t } = useTranslation()
   const label = memberLabel(slot)
   const perSide = slot.sets.some((p) => p.reps_per_side)
+  const performed = substitution ? substitution.replacement : slot.exercise
+  // The history follows the exercise, so a substituted slot shows the
+  // substitute's past only once it has one of its own.
+  const last = substitution ? null : slot.last_performance
 
   return (
     <div className="grid gap-3">
@@ -252,6 +343,21 @@ function SlotBlock({
               ))}
             </p>
           )}
+          {last ? (
+            <LastPerformance
+              performance={last}
+              onOpen={() => onOpenHistory(performed)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenHistory(performed)}
+              className="mt-1 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <History className="size-3 shrink-0" />
+              {t('training.lastTimeNever')}
+            </button>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {slot.sets[0]?.rest_seconds != null && slot.sets[0].rest_seconds > 0 && (
@@ -278,7 +384,7 @@ function SlotBlock({
         </div>
       </div>
 
-      <ExerciseMedia exercise={substitution ? substitution.replacement : slot.exercise} />
+      <ExerciseMedia exercise={performed} />
 
       <div>
         <div className={cn(TABLE_GRID, 'pb-1 text-xs text-muted-foreground')}>
@@ -302,11 +408,19 @@ function SlotBlock({
         <div className="grid gap-1">
           {slot.sets.map((prescription) => {
             const log = logs.get(setKey(slot, prescription))
+            // Same set number last time when it exists, else the last set of
+            // that session — a 4-set day after a 3-set one still gets a hint.
+            const previous =
+              last?.sets.find((s) => s.set_number === prescription.set_number) ??
+              last?.sets[last.sets.length - 1]
             return (
+              // Keyed on the prescription alone: unchecking a set must keep
+              // the values in the inputs so they can be corrected.
               <SetRow
                 key={prescription.id}
                 prescription={prescription}
                 log={log}
+                lastWeight={previous?.weight ? trimWeight(previous.weight) : null}
                 saving={saving}
                 onLog={(weight, reps) => onLog(prescription, weight, reps)}
                 onUnlog={() => log && onUnlog(prescription, log)}
@@ -323,13 +437,10 @@ export function TrainingDayPage() {
   const { t } = useTranslation()
   const { dayId } = useParams()
   const [searchParams] = useSearchParams()
-  const weekNumber = Math.max(1, Number(searchParams.get('week')) || 1)
   // Where the day was opened from, so "back" lands on the phase and not at
   // the root. Absent (a shared or bookmarked link) falls back to the list.
   const fromProgram = searchParams.get('program')
   const fromPhase = searchParams.get('phase')
-  const backTo =
-    fromProgram && fromPhase ? `/training/${fromProgram}/phase/${fromPhase}` : '/training'
   const { training } = useLayoutContext()
   const weightUnit = training?.weight_unit ?? 'kg'
 
@@ -338,6 +449,7 @@ export function TrainingDayPage() {
   const [logs, setLogs] = useState<Map<string, SetLog>>(new Map())
   const [substitutions, setSubstitutions] = useState<Record<number, Substitution>>({})
   const [substituting, setSubstituting] = useState<ExerciseSlot | null>(null)
+  const [historyFor, setHistoryFor] = useState<TrainingExercise | null>(null)
   const [rest, setRest] = useState<RestRequest | null>(null)
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [completedAt, setCompletedAt] = useState<string | null>(null)
@@ -345,17 +457,43 @@ export function TrainingDayPage() {
   const [completing, setCompleting] = useState(false)
   const [tempoLegend, setTempoLegend] = useState(false)
 
-  // One workout session per visit, created on the first logged set.
+  // Guards against two fast clicks creating two sessions; the endpoint itself
+  // is idempotent per day, so a reload can never fork one either.
   const sessionPromise = useRef<Promise<WorkoutSession> | null>(null)
 
+  // The day arrives with whatever was already logged on it. Rebuilding that
+  // state is what makes reopening a finished workout show the workout.
   useEffect(() => {
-    api.training.day(Number(dayId)).then(setDay, (e: Error) => setError(e.message))
+    let cancelled = false
+    api.training.day(Number(dayId)).then(
+      (detail) => {
+        if (cancelled) return
+        setDay(detail)
+        setSessionId(detail.session?.id ?? null)
+        setCompletedAt(detail.session?.completed_at ?? null)
+        setLogs(hydrateLogs(detail))
+        sessionPromise.current = detail.session
+          ? Promise.resolve(detail.session)
+          : null
+      },
+      (e: Error) => !cancelled && setError(e.message),
+    )
+    return () => {
+      cancelled = true
+    }
   }, [dayId])
+
+  const backTo =
+    fromProgram && fromPhase
+      ? `/training/${fromProgram}/phase/${fromPhase}`
+      : day
+        ? `/training/${day.program_slug}/phase/${day.phase}`
+        : '/training'
 
   const ensureSession = useCallback((): Promise<WorkoutSession> => {
     if (!sessionPromise.current) {
       sessionPromise.current = api.training.sessions
-        .create({ day: Number(dayId), week_number: weekNumber })
+        .create({ day: Number(dayId) })
         .then((session) => {
           setSessionId(session.id)
           return session
@@ -365,7 +503,7 @@ export function TrainingDayPage() {
       })
     }
     return sessionPromise.current
-  }, [dayId, weekNumber])
+  }, [dayId])
 
   // The rest timer is opened deliberately from the exercise's clock icon and
   // waits for play — logging a set never starts it.
@@ -480,6 +618,7 @@ export function TrainingDayPage() {
   }
 
   const groups = groupSlots(day.slots)
+  const status = dayStatus(day)
 
   return (
     <div className="mx-auto grid w-full max-w-lg gap-4 sm:gap-5">
@@ -491,14 +630,34 @@ export function TrainingDayPage() {
         </Button>
         <div className="min-w-0 flex-1">
           <h1 className="text-lg font-semibold">{day.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t('training.week', { number: weekNumber })}
+          <p className="truncate text-sm text-muted-foreground">
+            {[
+              t('training.week', {
+                number: day.plan_week ?? day.week_number,
+              }),
+              day.scheduled_on ? formatWeekdayDate(day.scheduled_on) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
         </div>
-        {completedAt && (
-          <span className="rounded bg-primary/15 px-2 py-1 text-sm text-primary">
+        {completedAt ? (
+          <span className="shrink-0 rounded bg-primary/15 px-2 py-1 text-sm text-primary">
             {t('training.dayCompleted')}
           </span>
+        ) : (
+          status && (
+            <span
+              className={cn(
+                'shrink-0 rounded px-2 py-1 text-xs',
+                status === 'today'
+                  ? 'bg-primary/15 text-primary'
+                  : 'bg-accent text-muted-foreground',
+              )}
+            >
+              {t(`training.status_${status}`)}
+            </span>
+          )
         )}
       </div>
 
@@ -530,6 +689,7 @@ export function TrainingDayPage() {
                   onSubstitute={() => setSubstituting(slot)}
                   onOpenRest={() => openRest(group, slot)}
                   onOpenTempoLegend={() => setTempoLegend(true)}
+                  onOpenHistory={setHistoryFor}
                   onLog={(prescription, weight, reps) =>
                     logSet(slot, prescription, weight, reps)
                   }
@@ -550,6 +710,7 @@ export function TrainingDayPage() {
                 onSubstitute={() => setSubstituting(group.slots[0])}
                 onOpenRest={() => openRest(group, group.slots[0])}
                 onOpenTempoLegend={() => setTempoLegend(true)}
+                onOpenHistory={setHistoryFor}
                 onLog={(prescription, weight, reps) =>
                   logSet(group.slots[0], prescription, weight, reps)
                 }
@@ -571,6 +732,11 @@ export function TrainingDayPage() {
       )}
 
       <TempoLegend open={tempoLegend} onClose={() => setTempoLegend(false)} />
+
+      <ExerciseHistoryDialog
+        exercise={historyFor}
+        onClose={() => setHistoryFor(null)}
+      />
 
       <SubstitutionDialog
         slot={substituting}
