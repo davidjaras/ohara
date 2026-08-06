@@ -70,6 +70,19 @@ function hydrateLogs(detail: WorkoutDayDetail): Map<string, SetLog> {
   return map
 }
 
+/**
+ * The swaps in force, resolved server-side against this session's scope. They
+ * arrive with the day so a reload keeps showing the exercise you are actually
+ * doing instead of reverting to the prescription.
+ */
+function hydrateSubstitutions(detail: WorkoutDayDetail): Record<number, Substitution> {
+  const map: Record<number, Substitution> = {}
+  for (const slot of detail.slots) {
+    if (slot.substitution) map[slot.id] = slot.substitution
+  }
+  return map
+}
+
 /** "40 × 10 · 40 × 10 · 35 × 8" — a past session at a glance. */
 function formatSets(performance: Performance): string {
   return performance.sets
@@ -306,10 +319,11 @@ function SlotBlock({
   const { t } = useTranslation()
   const label = memberLabel(slot)
   const perSide = slot.sets.some((p) => p.reps_per_side)
+  // The card is titled by what you are doing, not by what was prescribed:
+  // after a swap the substitute IS the exercise, and its own history is the
+  // one worth seeing.
   const performed = substitution ? substitution.replacement : slot.exercise
-  // The history follows the exercise, so a substituted slot shows the
-  // substitute's past only once it has one of its own.
-  const last = substitution ? null : slot.last_performance
+  const last = slot.last_performance
 
   return (
     <div className="grid gap-3">
@@ -317,11 +331,11 @@ function SlotBlock({
         <div className="min-w-0">
           <p className="text-sm font-semibold">
             {label && <span className="mr-2 text-primary">{label}</span>}
-            {slot.exercise.name}
+            {performed.name}
           </p>
           {substitution && (
-            <p className="text-xs text-primary">
-              {t('training.substitutedBy', { name: substitution.replacement.name })}
+            <p className="text-xs text-muted-foreground">
+              {t('training.insteadOf', { name: slot.exercise.name })}
             </p>
           )}
           {(slot.coach_annotation || perSide) && (
@@ -461,27 +475,28 @@ export function TrainingDayPage() {
   // is idempotent per day, so a reload can never fork one either.
   const sessionPromise = useRef<Promise<WorkoutSession> | null>(null)
 
-  // The day arrives with whatever was already logged on it. Rebuilding that
-  // state is what makes reopening a finished workout show the workout.
+  // The day arrives with whatever was already logged on it and whichever
+  // swaps are in force. Rebuilding that state is what makes reopening a
+  // finished workout show the workout, and the substitute stay the title.
+  const applyDay = useCallback((detail: WorkoutDayDetail) => {
+    setDay(detail)
+    setSessionId(detail.session?.id ?? null)
+    setCompletedAt(detail.session?.completed_at ?? null)
+    setLogs(hydrateLogs(detail))
+    setSubstitutions(hydrateSubstitutions(detail))
+    sessionPromise.current = detail.session ? Promise.resolve(detail.session) : null
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     api.training.day(Number(dayId)).then(
-      (detail) => {
-        if (cancelled) return
-        setDay(detail)
-        setSessionId(detail.session?.id ?? null)
-        setCompletedAt(detail.session?.completed_at ?? null)
-        setLogs(hydrateLogs(detail))
-        sessionPromise.current = detail.session
-          ? Promise.resolve(detail.session)
-          : null
-      },
+      (detail) => !cancelled && applyDay(detail),
       (e: Error) => !cancelled && setError(e.message),
     )
     return () => {
       cancelled = true
     }
-  }, [dayId])
+  }, [dayId, applyDay])
 
   const backTo =
     fromProgram && fromPhase
@@ -602,9 +617,15 @@ export function TrainingDayPage() {
     )
   }, [sessionId])
 
-  const handleSubstituted = useCallback((slotId: number, substitution: Substitution) => {
-    setSubstitutions((prev) => ({ ...prev, [slotId]: substitution }))
-  }, [])
+  const handleSubstituted = useCallback(
+    (slotId: number, substitution: Substitution) => {
+      // Retitle the card immediately, then refetch: "última vez" belongs to
+      // the new exercise and only the server can resolve it.
+      setSubstitutions((prev) => ({ ...prev, [slotId]: substitution }))
+      api.training.day(Number(dayId)).then(applyDay, () => {})
+    },
+    [dayId, applyDay],
+  )
 
   if (error && !day) {
     return <p className="py-10 text-center text-sm text-destructive">{error}</p>

@@ -140,9 +140,13 @@ export interface ExerciseSlot {
   is_superset: boolean
   coach_annotation: string
   modifiers: { type: string }[]
+  /** What the coach prescribed. What you are doing is `substitution` when
+   *  there is one — that is what titles the card and what a set records. */
   exercise: TrainingExercise
   sets: SetPrescription[]
-  /** The previous time this exercise was logged; excludes today's session. */
+  substitution: Substitution | null
+  /** The previous time the *performed* exercise was logged; excludes today's
+   *  session, so the line never mirrors what was just typed. */
   last_performance: Performance | null
 }
 
@@ -485,8 +489,13 @@ export const api = {
     },
     exerciseHistory: (exerciseId: number) =>
       request<ExerciseHistory>(`/api/training/exercises/${exerciseId}/history/`),
-    substitutions: (slotId: number) =>
-      request<SubstitutionOptions>(`/api/training/slots/${slotId}/substitutions/`),
+    // The session decides whether a session-scoped swap is in force; without
+    // one only program-scoped substitutions apply.
+    substitutions: (slotId: number, sessionId?: number | null) =>
+      request<SubstitutionOptions>(
+        `/api/training/slots/${slotId}/substitutions/` +
+          (sessionId ? `?session=${sessionId}` : ''),
+      ),
     substitute: (
       slotId: number,
       data: { replacement: number; scope: 'session' | 'program'; session?: number | null; reason?: string },

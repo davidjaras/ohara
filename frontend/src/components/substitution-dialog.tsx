@@ -97,15 +97,13 @@ export function SubstitutionDialog({
     setScope('session')
     setGymOpen(false)
     setError(null)
-    api.training.substitutions(slot.id).then(
-      (opts) => {
-        setOptions(opts)
-        // Surface a substitution persisted in an earlier visit on the card.
-        if (opts.active) onSubstituted(slot.id, opts.active)
-      },
-      (e: Error) => setError(e.message),
+    // The session decides whether a session-scoped swap counts as active.
+    // Nothing is reported back on open any more: the day payload already
+    // carries the substitution in force, so the card is never out of date.
+    api.training.substitutions(slot.id, sessionId).then(setOptions, (e: Error) =>
+      setError(e.message),
     )
-  }, [slot, onSubstituted])
+  }, [slot, sessionId])
 
   const confirm = () => {
     if (!slot || selectedId === null) return
@@ -135,7 +133,13 @@ export function SubstitutionDialog({
       <DialogContent className="max-h-[85svh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {t('training.substituteTitle', { name: slot?.exercise.name ?? '' })}
+            {/* What you are replacing is what you are currently doing, which
+                after an earlier swap is the substitute, not the prescription. */}
+            {t('training.substituteTitle', {
+              name: slot
+                ? (slot.substitution?.replacement.name ?? slot.exercise.name)
+                : '',
+            })}
           </DialogTitle>
           <DialogDescription>{t('training.substituteDescription')}</DialogDescription>
         </DialogHeader>

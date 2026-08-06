@@ -15,11 +15,13 @@ from django.db.models import Prefetch
 from .models import (
     Exercise,
     ExerciseSlot,
+    ExerciseSubstitution,
     Program,
     ProgramRun,
     ProgramVariant,
     RunStatus,
     SetLog,
+    SubstitutionScope,
     Week,
     WorkoutDay,
     WorkoutSession,
@@ -85,6 +87,44 @@ def substitution_candidates(slot):
     for exercise in candidates:
         grouped[exercise.setting].append(exercise)
     return grouped
+
+
+def active_substitutions(user, slots, session=None):
+    """Slot id → the substitution in force, honouring its scope.
+
+    The single place a substitution is resolved: the day view, the picker and
+    the log endpoint all read it, so what the card shows is by construction
+    what gets written to `SetLog.performed_exercise`.
+
+    A program-scoped swap applies to every session of that slot; a
+    session-scoped one only inside the session it was made in, so a one-off
+    stays one-off. Ascending order means the most recent lands in the dict
+    last and wins.
+    """
+    condition = models.Q(scope=SubstitutionScope.PROGRAM)
+    if session is not None:
+        condition |= models.Q(scope=SubstitutionScope.SESSION, session=session)
+    return {
+        substitution.slot_id: substitution
+        for substitution in ExerciseSubstitution.objects.filter(
+            user=user, slot__in=slots
+        )
+        .filter(condition)
+        .select_related("replacement")
+        .order_by("created_at")
+    }
+
+
+def performed_exercises(slots, substitutions):
+    """Slot id → what is actually being done on it, substitution applied."""
+    return {
+        slot.pk: (
+            substitutions[slot.pk].replacement
+            if slot.pk in substitutions
+            else slot.exercise
+        )
+        for slot in slots
+    }
 
 
 # --- Plan scheduling ---------------------------------------------------------

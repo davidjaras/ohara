@@ -6,7 +6,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
-from .models import Exercise, ExerciseSubstitution, RunStatus, SetLog, SetPrescription
+from .models import (
+    Exercise,
+    ExerciseSubstitution,
+    RunStatus,
+    SetLog,
+    SetPrescription,
+    SubstitutionScope,
+)
 from .permissions import TrainingEnabled
 from .serializers import (
     ExerciseSerializer,
@@ -197,9 +204,13 @@ class DayDetailView(TrainingView):
             scheduled_on = services.scheduled_date(run.started_on, plan_week, day)
 
         slots = list(day.slots.all())
+        # What the card is titled by, and what a logged set will record, are
+        # the same lookup — resolved once for the whole day.
+        substitutions = services.active_substitutions(request.user, slots, session)
+        performed = services.performed_exercises(slots, substitutions)
         performances = services.last_performances(
             request.user,
-            {slot.exercise for slot in slots},
+            set(performed.values()),
             exclude_session=session,
         )
         return Response(
@@ -210,6 +221,8 @@ class DayDetailView(TrainingView):
                     "in_active_plan": in_plan,
                     "plan_week": plan_week,
                     "scheduled_on": scheduled_on,
+                    "substitutions": substitutions,
+                    "performed_exercises": performed,
                     "last_performances": performances,
                 },
             ).data
@@ -249,10 +262,15 @@ class SlotSubstitutionsView(TrainingView):
     def get(self, request, pk):
         slot = get_object_or_404(services.accessible_slots(request.user), pk=pk)
         grouped = services.substitution_candidates(slot)
-        active = (
-            ExerciseSubstitution.objects.filter(user=request.user, slot=slot)
-            .order_by("-created_at")
-            .first()
+        # `?session=` decides whether session-scoped swaps count: without a
+        # session (a day not started yet) only program-scoped ones are in
+        # force, which is the honest answer.
+        session = None
+        session_id = request.query_params.get("session")
+        if session_id:
+            session = services.own_sessions(request.user).filter(pk=session_id).first()
+        active = services.active_substitutions(request.user, [slot], session).get(
+            slot.pk
         )
         return Response(
             {
@@ -263,7 +281,10 @@ class SlotSubstitutionsView(TrainingView):
         )
 
     def post(self, request, pk):
-        slot = get_object_or_404(services.accessible_slots(request.user), pk=pk)
+        slot = get_object_or_404(
+            services.accessible_slots(request.user).select_related("day__week__phase"),
+            pk=pk,
+        )
         serializer = SubstitutionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -272,6 +293,14 @@ class SlotSubstitutionsView(TrainingView):
         if data.get("session") is not None:
             session = get_object_or_404(
                 services.own_sessions(request.user), pk=data["session"]
+            )
+        elif data["scope"] == SubstitutionScope.SESSION:
+            # "This session only" needs a session to be scoped to. Swapping an
+            # exercise before logging the first set is the normal order, so the
+            # session is opened here rather than leaving a row that is scoped to
+            # nothing and silently never applies.
+            session, _ = services.get_or_create_session(
+                request.user, slot.day, timezone.localdate()
             )
         substitution = ExerciseSubstitution.objects.create(
             user=request.user,
@@ -351,11 +380,11 @@ class SessionLogsView(TrainingView):
         slot = get_object_or_404(
             services.accessible_slots(request.user), pk=data["slot"]
         )
-        substitution = (
-            ExerciseSubstitution.objects.filter(user=request.user, slot=slot)
-            .order_by("-created_at")
-            .first()
-        )
+        # Scope-aware: a swap made for another session must not follow the
+        # exercise into this one.
+        substitution = services.active_substitutions(
+            request.user, [slot], session
+        ).get(slot.pk)
         performed = substitution.replacement if substitution else slot.exercise
         log = SetLog.objects.create(
             session=session,
