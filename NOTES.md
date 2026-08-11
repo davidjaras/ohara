@@ -234,3 +234,45 @@ puede registrar una carga que nadie eligió. Las filas importadas no tienen
 fecha, y como Postgres ordena los NULL primero en `DESC`, todo el orden por
 `performed_on` va con `nulls_last`: sin eso un registro de 2023 sin fecha
 aparecía como "la última vez" por encima del entrenamiento de ayer.
+
+## El ejercicio sustituido es *el* ejercicio
+
+Sustituir dejaba el ejercicio prescrito como título de la tarjeta y mandaba lo
+que ibas a hacer de verdad a una línea pequeña debajo ("Sustituido por X").
+Está al revés: si cambiaste el ejercicio, el que haces es el que manda. Ahora
+el título es el sustituto — con su letra — y la prescripción queda debajo como
+`en lugar de <nombre>`, que sigue siendo información útil (es lo que pidió el
+programa) pero no es lo que estás levantando.
+
+El cambio de presentación no se sostenía solo, porque destapaba dos cosas:
+
+**La sustitución no viajaba con el día.** `days/<pk>/` no la devolvía y el
+cliente solo se enteraba al abrir el selector, así que un F5 volvía a mostrar
+el nombre prescrito. Con el sustituto de título eso habría sido peor que
+antes: recargar deshacía el cambio a la vista. El día ahora resuelve las
+sustituciones vigentes de todos sus slots en una sola consulta y las manda en
+el mismo payload, junto con la `last_performance` del ejercicio **realizado** —
+el historial sigue al ejercicio, no a la prescripción.
+
+**`scope` se guardaba y luego se ignoraba.** Tanto el selector como el registro
+resolvían con `filter(user, slot).order_by("-created_at").first()`, así que una
+sustitución hecha como "Solo esta sesión" se aplicaba a todas las sesiones para
+siempre. Con la etiqueta pequeña era un detalle; con el sustituto de título, un
+cambio puntual renombraba ese slot en todas las semanas del plan.
+`services.active_substitutions` es ahora el único sitio donde se resuelve —
+lo leen la vista del día, el selector y el endpoint de registro — y respeta el
+scope: `program` aplica a todas las sesiones del slot, `session` solo dentro de
+la suya. Que sea uno solo importa: lo que muestra la tarjeta y lo que se
+escribe en `SetLog.performed_exercise` salen de la misma consulta y no pueden
+divergir.
+
+**"Solo esta sesión" necesita una sesión.** Cambiar el ejercicio *antes* de
+registrar la primera serie es el orden normal, y hasta ahora eso creaba la fila
+con `session = None`. Ignorando el scope daba igual; respetándolo, esa fila no
+coincide con nada y la sustitución no haría nada en silencio. El endpoint abre
+la sesión del día (con el `get_or_create` que ya es idempotente por día) cuando
+el scope es `session` y no llega ninguna.
+
+Sigue sin haber forma de deshacer una sustitución. Con el scope respetado un
+cambio de sesión se apaga solo, pero uno de programa encabeza ese slot hasta
+el final del plan: hace falta un DELETE, y es el siguiente paso.

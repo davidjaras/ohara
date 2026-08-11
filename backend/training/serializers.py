@@ -77,8 +77,12 @@ class PerformanceSerializer(serializers.ModelSerializer):
 
 
 class ExerciseSlotSerializer(serializers.ModelSerializer):
+    # `exercise` stays the prescription — what the coach wrote. What is being
+    # done is `substitution.replacement` when there is one, which is what the
+    # card is titled by and what a logged set records.
     exercise = ExerciseSerializer(read_only=True)
     sets = SetPrescriptionSerializer(many=True, read_only=True)
+    substitution = serializers.SerializerMethodField()
     # Filled by DayDetailView from a single lookup per exercise; None when the
     # exercise has never been logged.
     last_performance = serializers.SerializerMethodField()
@@ -88,12 +92,21 @@ class ExerciseSlotSerializer(serializers.ModelSerializer):
         fields = [
             "id", "order", "series_label", "series_position", "is_superset",
             "coach_annotation", "modifiers", "exercise", "sets",
-            "last_performance",
+            "substitution", "last_performance",
         ]
 
+    def get_substitution(self, slot):
+        substitution = (self.context.get("substitutions") or {}).get(slot.pk)
+        return SubstitutionSerializer(substitution).data if substitution else None
+
     def get_last_performance(self, slot):
+        # Keyed on the performed exercise: a substituted slot shows the
+        # substitute's own history, not the prescription's.
+        performed = (self.context.get("performed_exercises") or {}).get(
+            slot.pk, slot.exercise
+        )
         performances = self.context.get("last_performances") or {}
-        session = performances.get(slot.exercise_id)
+        session = performances.get(performed.pk)
         return PerformanceSerializer(session).data if session else None
 
 

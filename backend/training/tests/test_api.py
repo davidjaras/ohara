@@ -81,6 +81,150 @@ def test_substitution_picker_groups_by_setting_and_logs_substituted(
     assert log.json()["was_substituted"] is True
 
 
+def test_session_scoped_substitution_does_not_leak_into_another_session(
+    client, enabled_profile, glute_coach, session
+):
+    """"Solo esta sesión" used to apply forever: scope was stored and then
+    ignored when resolving, so one swap renamed the slot in every session."""
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "session", "session": session.pk},
+        format="json",
+    )
+
+    inside = client.post(
+        f"/api/training/sessions/{session.pk}/logs/",
+        {"slot": slot.pk, "set_number": 1, "reps": 10},
+        format="json",
+    ).json()
+    assert inside["performed_exercise"] == "DB Lunge"
+    assert inside["was_substituted"] is True
+
+    other = WorkoutSession.objects.create(
+        user=session.user, day=slot.day, week_number=1, performed_on=date(2026, 8, 10)
+    )
+    outside = client.post(
+        f"/api/training/sessions/{other.pk}/logs/",
+        {"slot": slot.pk, "set_number": 1, "reps": 10},
+        format="json",
+    ).json()
+    assert outside["performed_exercise"] == slot.exercise.name
+    assert outside["was_substituted"] is False
+
+
+def test_session_scoped_substitution_opens_the_session_it_needs(
+    client, enabled_profile, glute_coach
+):
+    """Swapping before logging the first set is the normal order, so "solo
+    esta sesión" with no session must not write a row scoped to nothing."""
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    assert not WorkoutSession.objects.filter(day=slot.day).exists()
+
+    created = client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "session"},
+        format="json",
+    )
+    assert created.status_code == 201
+    session = WorkoutSession.objects.get(day=slot.day)
+    assert created.json()["session"] == session.pk
+
+    # And it is actually in force: the day is titled by the substitute and a
+    # logged set records it.
+    body = client.get(f"/api/training/days/{slot.day_id}/").json()
+    assert body["slots"][0]["substitution"]["replacement"]["name"] == "DB Lunge"
+    log = client.post(
+        f"/api/training/sessions/{session.pk}/logs/",
+        {"slot": slot.pk, "set_number": 1, "reps": 10},
+        format="json",
+    ).json()
+    assert log["performed_exercise"] == "DB Lunge"
+
+
+def test_program_scoped_substitution_applies_to_every_session(
+    client, enabled_profile, glute_coach, session
+):
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+
+    other = WorkoutSession.objects.create(
+        user=session.user, day=slot.day, week_number=1, performed_on=date(2026, 8, 10)
+    )
+    for target in (session, other):
+        body = client.post(
+            f"/api/training/sessions/{target.pk}/logs/",
+            {"slot": slot.pk, "set_number": 1, "reps": 10},
+            format="json",
+        ).json()
+        assert body["performed_exercise"] == "DB Lunge"
+
+
+def test_day_detail_carries_the_substitution_and_the_substitutes_history(
+    client, enabled_profile, glute_coach, session
+):
+    """The card is titled by the substitute, so the day has to say there is
+    one — and "última vez" has to follow the substitute, not the prescription."""
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+    older = WorkoutSession.objects.create(
+        user=session.user, day=slot.day, week_number=1, performed_on=date(2026, 7, 20)
+    )
+    SetLog.objects.create(
+        session=older, performed_exercise=replacement,
+        set_number=1, weight="30.00", reps=11,
+    )
+    SetLog.objects.create(  # the prescription's own history must not surface
+        session=older, performed_exercise=slot.exercise,
+        set_number=1, weight="99.00", reps=1,
+    )
+
+    body = client.get(f"/api/training/days/{slot.day_id}/").json()
+    slot_body = body["slots"][0]
+    assert slot_body["exercise"]["name"] == slot.exercise.name
+    assert slot_body["substitution"]["replacement"]["name"] == "DB Lunge"
+    assert slot_body["last_performance"]["sets"][0]["reps"] == 11
+
+
+def test_picker_only_counts_session_scoped_swaps_for_that_session(
+    client, enabled_profile, glute_coach, session
+):
+    slot = ExerciseSlot.objects.get(day__week__phase__variant__program=glute_coach)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "session", "session": session.pk},
+        format="json",
+    )
+
+    url = f"/api/training/slots/{slot.pk}/substitutions/"
+    assert client.get(f"{url}?session={session.pk}").json()["active"] is not None
+    # No session, or a different one: only program-scoped swaps are in force.
+    assert client.get(url).json()["active"] is None
+
+
 def test_create_session_and_log_against_prescription(client, enabled_profile, glute_coach):
     day = WorkoutDay.objects.get(week__phase__variant__program=glute_coach)
     created = client.post("/api/training/sessions/", {"day": day.pk}, format="json")
