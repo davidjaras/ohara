@@ -11,7 +11,7 @@ import {
 import { formatClock, formatMinutes } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Panel } from '@/components/panel'
 import {
   Dialog,
   DialogContent,
@@ -230,14 +230,36 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
     </p>
   )
 
+  // The idle ring previews the duration you are about to commit to, so the
+  // hero keeps its shape and the screen does not jump when the clock starts.
+  const previewSeconds =
+    choice === 'none' ? null : choice === 'custom' ? (customInvalid ? null : Number(customMinutes) * 60) : choice * 60
+
   return (
-    <Card>
-      <CardContent className="p-5 sm:p-6">
+    <Panel variant="hero" className="p-5">
+      <p className="mb-4 text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
+        {t('timer.heroLabel')}
+      </p>
+      <div>
         {timer === null ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t('timer.loading')}</p>
         ) : !timer.active ? (
-          <div className="flex flex-col items-center gap-4 py-4">
+          <div className="grid gap-4">
+            <div className="flex justify-center">
+              <TimerRing progress={0} mode={previewSeconds === null ? 'cycle' : 'planned'}>
+                {previewSeconds === null ? (
+                  <p className="font-mono text-4xl font-semibold sm:text-5xl">∞</p>
+                ) : (
+                  clock(previewSeconds)
+                )}
+                <p className="text-sm text-muted-foreground">{t('timer.ready')}</p>
+              </TimerRing>
+            </div>
             <RangeSelect<DurationChoice>
+              size="chips"
+              // Bleeds to the panel edges so a chip that scrolls out of view
+              // reads as scrollable rather than clipped.
+              className="-mx-5 px-5"
               options={[
                 ...PLANNED_PRESET_MINUTES.map((minutes) => ({
                   value: minutes as DurationChoice,
@@ -257,21 +279,18 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
                 step={1}
                 placeholder="40"
                 aria-label={t('timer.customMinutes')}
-                className="w-32 text-center"
+                className="mx-auto w-32 text-center"
                 value={customMinutes}
                 onChange={(e) => setCustomMinutes(e.target.value)}
               />
             )}
-            <Button
-              size="lg"
-              className="h-12 px-8 text-base"
-              onClick={handleStart}
-              disabled={customInvalid}
-            >
-              <Play className="size-5" />
+            <Button size="xl" className="w-full" onClick={handleStart} disabled={customInvalid}>
+              <Play />
               {t('timer.start')}
             </Button>
-            <p className="text-sm text-muted-foreground">{t('timer.keepsRunning')}</p>
+            <p className="text-center text-sm text-muted-foreground">
+              {t('timer.keepsRunning')}
+            </p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 py-2">
@@ -376,7 +395,7 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
           </div>
         )}
         {error && <p className="mt-3 text-center text-sm text-destructive">{error}</p>}
-      </CardContent>
+      </div>
 
       <Dialog open={finishOpen} onOpenChange={(open) => !open && closeFinish()}>
         <DialogContent>
@@ -408,6 +427,6 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </Panel>
   )
 }
