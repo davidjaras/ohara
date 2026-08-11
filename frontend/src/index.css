@@ -82,6 +82,31 @@
     --sidebar-accent-foreground: oklch(0.965 0.003 240);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.6 0.12 235);
+
+    /* --- Liquid glass material ---------------------------------------
+       The whole UI is built from three glass levels plus a hairline; these
+       are the only surface values any component should reach for. They are
+       neutral on purpose: the color comes from the ambient layer behind
+       them, never from the panel itself. */
+    --glass-fill: oklch(1 0 0 / 5.5%);
+    --glass-fill-strong: oklch(1 0 0 / 9%);
+    --glass-border: oklch(1 0 0 / 12%);
+    --glass-highlight: oklch(1 0 0 / 22%);
+    --glass-blur: 24px;
+    /* Separator for row lists and section rules: the default shape of a
+       block is a hairline, not a box. */
+    --hairline: oklch(1 0 0 / 8%);
+    /* Height the floating bottom nav claims, so pages and the rest-timer
+       overlay clear it without hardcoding the same number twice. */
+    --nav-offset: 5.5rem;
+
+    /* Ambient color fields, derived from whatever --primary the active
+       accent set. Deriving with color-mix is what keeps the seven
+       [data-accent] blocks below untouched: they define --primary and the
+       glass follows. */
+    --ambient-strong: color-mix(in oklab, var(--primary) 42%, transparent);
+    --ambient-soft: color-mix(in oklab, var(--primary) 22%, transparent);
+    --ambient-neutral: oklch(1 0 0 / 6%);
 }
 
 /* Per-user accent themes. `:root` above is the default (blue); selecting an
@@ -153,6 +178,81 @@
 
 .dark {
     --background: oklch(0.145 0.002 240);
+}
+
+/* --- Glass utilities -------------------------------------------------
+   Three levels, used everywhere instead of per-component styling:
+
+   - `glass-subtle`   fill + border only, no backdrop-filter. Chips, inputs,
+                      icon tiles, selectable rows. Cheap enough to repeat.
+   - `glass-elevated` the standard panel: blur, saturation and a top
+                      highlight. Header, nav, dialogs, alerts.
+   - `glass-hero`     the focal panel of a screen (the timer). Stronger fill
+                      and an accent-tinted inner glow.
+
+   Only the last two carry `backdrop-filter`, and a screen should hold a
+   handful of them at most — stacking blurred layers is what makes this
+   material expensive on mobile Safari. */
+
+@utility glass-subtle {
+    background: var(--glass-fill);
+    border: 1px solid var(--glass-border);
+}
+
+@utility glass-elevated {
+    position: relative;
+    background: var(--glass-fill);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+
+@utility glass-hero {
+    position: relative;
+    background: var(--glass-fill-strong);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    box-shadow: inset 0 1px 0 0 var(--glass-highlight),
+        inset 0 0 60px -30px var(--ambient-soft);
+}
+
+/* The lit top edge. It is what reads as "a pane catching light" rather than
+   "a lighter rectangle", so it is part of the material, not decoration.
+   Inset from the corners so it never crosses the radius. */
+@utility glass-lit {
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 14px;
+        right: 14px;
+        height: 1px;
+        background: var(--glass-highlight);
+        pointer-events: none;
+    }
+}
+
+/* Without backdrop-filter the fills alone are too faint to separate a panel
+   from the page, so raise them. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    :root {
+        --glass-fill: oklch(0.28 0.006 240 / 82%);
+        --glass-fill-strong: oklch(0.32 0.008 240 / 88%);
+    }
+}
+
+/* Transparency is a preference, not a requirement: opt out into flat opaque
+   surfaces that keep the same layout and the same contrast. */
+@media (prefers-reduced-transparency: reduce) {
+    :root {
+        --glass-fill: oklch(0.21 0.004 240);
+        --glass-fill-strong: oklch(0.25 0.005 240);
+        --glass-blur: 0px;
+        --ambient-strong: transparent;
+        --ambient-soft: transparent;
+        --ambient-neutral: transparent;
+    }
 }
 
 @layer base {
