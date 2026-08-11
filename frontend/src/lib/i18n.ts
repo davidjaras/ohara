@@ -14,7 +14,10 @@ const es = {
     history: 'Historial',
     weight: 'Peso',
     settings: 'Ajustes',
-    training: 'Entrenamiento',
+    // Short on purpose: it is a column of the nav pill, and 'Entrenamiento'
+    // does not fit one on a phone.
+    training: 'Entreno',
+    greeting: 'Hola, {{name}}',
   },
   stats: {
     streak: 'Racha',
@@ -306,6 +309,7 @@ const en: typeof es = {
     weight: 'Weight',
     settings: 'Settings',
     training: 'Training',
+    greeting: 'Hi, {{name}}',
   },
   stats: {
     streak: 'Streak',

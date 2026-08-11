@@ -4,6 +4,7 @@ import { ArrowRight, Check, Play, Timer } from 'lucide-react'
 import type { RestRole } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { IconTile } from '@/components/icon-tile'
 
 /** One rest countdown, opened from an exercise's clock icon. */
 export interface RestRequest {
@@ -67,22 +68,24 @@ export function RestTimer({
       : t('training.restTimerBetween')
 
   return (
-    <div className="fixed inset-x-4 bottom-20 z-30 mx-auto max-w-md sm:bottom-6">
+    // Sits just above the floating nav; both read the same offset so they can
+    // never overlap again.
+    <div className="fixed inset-x-4 bottom-[var(--nav-offset)] z-30 mx-auto max-w-md sm:bottom-6">
       <div
         className={cn(
-          'flex items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-lg',
-          isTransition && 'border-primary',
+          'glass-overlay glass-lit flex items-center gap-3 rounded-2xl px-4 py-3 shadow-xl',
+          isTransition && 'border-primary/50',
         )}
       >
-        <div className={cn('rounded-md bg-accent p-2', done && 'bg-primary/15')}>
+        <IconTile tone={done || isTransition ? 'accent' : 'muted'}>
           {done ? (
-            <Check className="size-4 text-primary" />
+            <Check className="size-4" />
           ) : isTransition ? (
-            <ArrowRight className="size-4 text-primary" />
+            <ArrowRight className="size-4" />
           ) : (
-            <Timer className="size-4 text-muted-foreground" />
+            <Timer className="size-4" />
           )}
-        </div>
+        </IconTile>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">
             {done ? t('training.restDone') : title}
