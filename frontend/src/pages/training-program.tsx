@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { formatShortDate } from '@/lib/format'
 import { routineLabel } from '@/lib/routine'
 import { useProgramDetail } from '@/lib/use-program'
 import { useActiveRun, useSchedule } from '@/lib/use-run'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/empty-state'
+import { PageHeader } from '@/components/page-header'
+import { Pill } from '@/components/pill'
+import { Section } from '@/components/section'
 import { useLayoutContext } from '@/components/layout'
 import { StartPlanDialog } from '@/components/start-plan-dialog'
 
@@ -38,56 +41,44 @@ export function TrainingProgramPage() {
   }, [detail, viewedVariantId, activeVariantId])
 
   if (loadError) {
-    return <p className="py-10 text-center text-sm text-destructive">{loadError}</p>
+    return <EmptyState tone="error">{loadError}</EmptyState>
   }
   if (!detail) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">{t('training.loading')}</p>
+    return <EmptyState>{t('training.loading')}</EmptyState>
   }
 
   const hasRoutines = detail.variants.length > 1
 
   return (
-    <div className="mx-auto grid w-full max-w-lg gap-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/training" aria-label={t('training.backToPrograms')}>
-            <ArrowLeft className="size-5" />
-          </Link>
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold">{detail.name}</h1>
-          {detail.coach && (
-            <p className="truncate text-sm text-muted-foreground">
-              {t('training.coach', { coach: detail.coach })}
-            </p>
-          )}
-        </div>
-      </div>
+    <div className="grid gap-8">
+      <PageHeader
+        title={detail.name}
+        subtitle={detail.coach ? t('training.coach', { coach: detail.coach }) : undefined}
+        backTo="/training"
+        backLabel={t('training.backToPrograms')}
+      />
 
       {hasRoutines && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('training.routineTitle')}</CardTitle>
-            <CardDescription>{t('training.routineDescription')}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
+        <Section
+          title={t('training.routineTitle')}
+          description={t('training.routineDescription')}
+        >
+          <div className="grid gap-2">
             {detail.variants.map((variant) => (
               <button
                 key={variant.id}
                 type="button"
                 onClick={() => setViewedVariantId(variant.id)}
                 className={cn(
-                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                  'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors',
                   variant.id === viewedVariant?.id
-                    ? 'border-primary bg-accent'
-                    : 'hover:bg-accent/50',
+                    ? 'border-primary/50 bg-primary/15'
+                    : 'border-glass-border bg-glass hover:bg-glass-strong',
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">{routineLabel(variant, t)}</span>
                 {variant.id === activeVariantId && (
-                  <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-xs text-primary">
-                    {t('training.activeTag')}
-                  </span>
+                  <Pill tone="accent">{t('training.activeTag')}</Pill>
                 )}
               </button>
             ))}
@@ -100,18 +91,16 @@ export function TrainingProgramPage() {
                 </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       )}
 
       {viewedVariant && viewedVariant.phases.length === 0 && (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {t('training.phasesEmpty')}
-        </p>
+        <EmptyState>{t('training.phasesEmpty')}</EmptyState>
       )}
 
       {viewedVariant && viewedVariant.phases.length > 0 && (
-        <div className="grid gap-2">
+        <ul className="divide-y divide-hairline border-t border-hairline">
           {viewedVariant.phases.map((phase) => {
             const dates = phase.weeks
               .flatMap((week) => week.days)
@@ -127,34 +116,32 @@ export function TrainingProgramPage() {
                 : null
 
             return (
-              <Card key={phase.id}>
+              <li key={phase.id}>
                 <Link
                   to={`/training/${detail.slug}/phase/${phase.id}`}
-                  className="block transition-colors hover:bg-accent/40"
+                  className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-glass"
                 >
-                  <CardHeader className="flex items-center gap-3">
-                    <div className="grid min-w-0 flex-1 gap-1">
-                      <CardTitle>
-                        {t('training.phase', { number: phase.number })}
-                        {phase.label && (
-                          <span className="ml-2 font-normal text-muted-foreground">
-                            {phase.label}
-                          </span>
-                        )}
-                      </CardTitle>
-                      <CardDescription className="truncate">
-                        {[t('training.weeksCount', { count: phase.weeks.length }), range]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </CardDescription>
-                    </div>
-                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-                  </CardHeader>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {t('training.phase', { number: phase.number })}
+                      {phase.label && (
+                        <span className="ml-2 font-normal text-muted-foreground">
+                          {phase.label}
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {[t('training.weeksCount', { count: phase.weeks.length }), range]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </Link>
-              </Card>
+              </li>
             )
           })}
-        </div>
+        </ul>
       )}
 
       <StartPlanDialog

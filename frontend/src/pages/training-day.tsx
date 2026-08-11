@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ArrowLeftRight, Check, History, Info, Timer } from 'lucide-react'
+import { ArrowLeftRight, Check, History, Info, Timer } from 'lucide-react'
 import {
   api,
   type ExerciseSlot,
@@ -16,7 +16,10 @@ import {
 import { formatShortDate, formatWeekdayDate, todayISO } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/empty-state'
+import { PageHeader } from '@/components/page-header'
+import { Panel } from '@/components/panel'
+import { Pill } from '@/components/pill'
 import {
   Dialog,
   DialogContent,
@@ -254,7 +257,7 @@ function SetRow({
           'mx-auto flex size-6 items-center justify-center rounded-full border transition-colors',
           logged
             ? 'border-primary bg-primary text-primary-foreground'
-            : 'text-transparent hover:border-primary',
+            : 'border-glass-border text-transparent hover:border-primary',
           saving && 'opacity-50',
         )}
       >
@@ -348,12 +351,7 @@ function SlotBlock({
           {slot.modifiers.length > 0 && (
             <p className="mt-1 flex flex-wrap gap-1">
               {slot.modifiers.map((modifier, i) => (
-                <span
-                  key={i}
-                  className="rounded bg-accent px-1.5 py-0.5 text-xs text-muted-foreground"
-                >
-                  {modifier.type.replaceAll('_', ' ')}
-                </span>
+                <Pill key={i}>{modifier.type.replaceAll('_', ' ')}</Pill>
               ))}
             </p>
           )}
@@ -401,7 +399,12 @@ function SlotBlock({
       <ExerciseMedia exercise={performed} />
 
       <div>
-        <div className={cn(TABLE_GRID, 'pb-1 text-xs text-muted-foreground')}>
+        <div
+          className={cn(
+            TABLE_GRID,
+            'border-b border-hairline pb-1.5 text-xs text-muted-foreground',
+          )}
+        >
           <span className="text-center">{t('training.colSet')}</span>
           <button
             type="button"
@@ -419,7 +422,7 @@ function SlotBlock({
           <span className="text-center">{t('training.colReps')}</span>
           <span />
         </div>
-        <div className="grid gap-1">
+        <div className="grid gap-1 pt-1.5">
           {slot.sets.map((prescription) => {
             const log = logs.get(setKey(slot, prescription))
             // Same set number last time when it exists, else the last set of
@@ -628,77 +631,61 @@ export function TrainingDayPage() {
   )
 
   if (error && !day) {
-    return <p className="py-10 text-center text-sm text-destructive">{error}</p>
+    return <EmptyState tone="error">{error}</EmptyState>
   }
   if (!day) {
-    return (
-      <p className="py-10 text-center text-sm text-muted-foreground">
-        {t('training.loading')}
-      </p>
-    )
+    return <EmptyState>{t('training.loading')}</EmptyState>
   }
 
   const groups = groupSlots(day.slots)
   const status = dayStatus(day)
 
   return (
-    <div className="mx-auto grid w-full max-w-lg gap-4 sm:gap-5">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to={backTo} aria-label={t('training.backToPhase')}>
-            <ArrowLeft className="size-5" />
-          </Link>
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold">{day.name}</h1>
-          <p className="truncate text-sm text-muted-foreground">
-            {[
-              t('training.week', {
-                number: day.plan_week ?? day.week_number,
-              }),
-              day.scheduled_on ? formatWeekdayDate(day.scheduled_on) : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-        </div>
-        {completedAt ? (
-          <span className="shrink-0 rounded bg-primary/15 px-2 py-1 text-sm text-primary">
-            {t('training.dayCompleted')}
-          </span>
-        ) : (
-          status && (
-            <span
-              className={cn(
-                'shrink-0 rounded px-2 py-1 text-xs',
-                status === 'today'
-                  ? 'bg-primary/15 text-primary'
-                  : 'bg-accent text-muted-foreground',
-              )}
-            >
-              {t(`training.status_${status}`)}
-            </span>
+    <div className="grid gap-5">
+      <PageHeader
+        title={day.name}
+        subtitle={[
+          t('training.week', { number: day.plan_week ?? day.week_number }),
+          day.scheduled_on ? formatWeekdayDate(day.scheduled_on) : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+        backTo={backTo}
+        backLabel={t('training.backToPhase')}
+        action={
+          completedAt ? (
+            <Pill tone="accent">{t('training.dayCompleted')}</Pill>
+          ) : (
+            status && (
+              <Pill tone={status === 'today' ? 'accent' : 'muted'}>
+                {t(`training.status_${status}`)}
+              </Pill>
+            )
           )
-        )}
-      </div>
+        }
+      />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {groups.map((group) =>
         group.label !== null ? (
-          // Superset: one joined card, members divided, accent on the edge.
-          <Card key={`series-${group.slots[0].id}`} className="border-l-4 border-l-primary">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                {t('training.superset', { label: group.label })}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {t('training.supersetHint', {
-                  sequence: group.slots.map(memberLabel).join(' → '),
-                })}
-              </p>
-            </CardHeader>
-            <CardContent className="grid gap-4 divide-y [&>*:not(:first-child)]:pt-4">
+          // Supersets are the one grouping on this screen that must read as a
+          // unit, so they keep a panel and an accent edge while standalone
+          // exercises are plain hairline-separated blocks.
+          <Panel
+            variant="subtle"
+            key={`series-${group.slots[0].id}`}
+            className="border-l-2 border-l-primary p-4"
+          >
+            <p className="text-sm font-semibold">
+              {t('training.superset', { label: group.label })}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t('training.supersetHint', {
+                sequence: group.slots.map(memberLabel).join(' → '),
+              })}
+            </p>
+            <div className="mt-4 grid gap-4 divide-y divide-hairline [&>*:not(:first-child)]:pt-4">
               {group.slots.map((slot) => (
                 <SlotBlock
                   key={slot.id}
@@ -717,11 +704,10 @@ export function TrainingDayPage() {
                   onUnlog={(prescription, log) => unlogSet(slot, prescription, log)}
                 />
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         ) : (
-          <Card key={`slot-${group.slots[0].id}`}>
-            <CardContent>
+          <div key={`slot-${group.slots[0].id}`} className="border-t border-hairline pt-4">
               <SlotBlock
                 slot={group.slots[0]}
                 substitution={substitutions[group.slots[0].id] ?? null}
@@ -739,8 +725,7 @@ export function TrainingDayPage() {
                   unlogSet(group.slots[0], prescription, log)
                 }
               />
-            </CardContent>
-          </Card>
+          </div>
         ),
       )}
 

@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ScheduledDay, TrainingPhase, TrainingWeek } from '@/lib/api'
 import { formatShortDate } from '@/lib/format'
 import { useProgramDetail } from '@/lib/use-program'
 import { useActiveRun, useSchedule } from '@/lib/use-run'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/empty-state'
+import { PageHeader } from '@/components/page-header'
+import { Pill } from '@/components/pill'
 
 /** "3 – 9 ago", from the days actually scheduled in that week. */
 function weekRange(entries: ScheduledDay[]): string | null {
@@ -40,19 +41,15 @@ function WeekSection({
   const done = entries.filter((entry) => entry.done).length
 
   return (
-    <Card className="gap-0 py-0">
+    <div className="border-b border-hairline">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
+        className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-3 text-left transition-colors hover:bg-glass"
       >
-        <span className="min-w-0 text-sm font-medium">
+        <span className="min-w-0 text-sm font-semibold">
           {t('training.week', { number: week.number })}
-          {week.is_deload && (
-            <span className="ml-2 rounded bg-accent px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
-              {t('training.deload')}
-            </span>
-          )}
+          {week.is_deload && <Pill className="ml-2">{t('training.deload')}</Pill>}
           {range && (
             <span className="ml-2 text-xs font-normal text-muted-foreground">{range}</span>
           )}
@@ -77,9 +74,9 @@ function WeekSection({
         </span>
       </button>
       {open && (
-        <div className="border-t">
+        <div className="border-t border-hairline">
           {week.days.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-muted-foreground">{t('training.daysEmpty')}</p>
+            <p className="py-3 text-sm text-muted-foreground">{t('training.daysEmpty')}</p>
           ) : (
             week.days.map((day) => {
               const entry = schedule.get(day.id)
@@ -87,10 +84,10 @@ function WeekSection({
                 <Link
                   key={day.id}
                   to={`/training/day/${day.id}?program=${slug}&phase=${phaseId}`}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors not-last:border-b hover:bg-accent/40"
+                  className="-mx-2 flex items-center gap-3 rounded-xl py-2.5 pr-2 pl-5 transition-colors not-last:border-b not-last:border-hairline hover:bg-glass"
                 >
                   <div className="grid min-w-0 flex-1 gap-0.5">
-                    <span className="truncate text-sm font-medium">
+                    <span className="truncate text-sm">
                       {day.name || t('training.day', { number: day.order })}
                     </span>
                     {/* The real date once the plan is running, the weekday
@@ -115,7 +112,7 @@ function WeekSection({
           )}
         </div>
       )}
-    </Card>
+    </div>
   )
 }
 
@@ -138,13 +135,13 @@ export function TrainingPhasePage() {
   }, [detail, phaseId])
 
   if (error) {
-    return <p className="py-10 text-center text-sm text-destructive">{error}</p>
+    return <EmptyState tone="error">{error}</EmptyState>
   }
   if (!detail) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">{t('training.loading')}</p>
+    return <EmptyState>{t('training.loading')}</EmptyState>
   }
   if (!phase) {
-    return <p className="py-10 text-center text-sm text-destructive">{t('training.phaseNotFound')}</p>
+    return <EmptyState tone="error">{t('training.phaseNotFound')}</EmptyState>
   }
 
   // While the plan runs, the week you are on is the one worth opening.
@@ -153,25 +150,22 @@ export function TrainingPhasePage() {
   )
 
   return (
-    <div className="mx-auto grid w-full max-w-lg gap-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to={`/training/${detail.slug}`} aria-label={t('training.backToProgram')}>
-            <ArrowLeft className="size-5" />
-          </Link>
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold">
+    <div className="grid gap-6">
+      <PageHeader
+        title={
+          <>
             {t('training.phase', { number: phase.number })}
             {phase.label && (
               <span className="ml-2 font-normal text-muted-foreground">{phase.label}</span>
             )}
-          </h1>
-          <p className="truncate text-sm text-muted-foreground">{detail.name}</p>
-        </div>
-      </div>
+          </>
+        }
+        subtitle={detail.name}
+        backTo={`/training/${detail.slug}`}
+        backLabel={t('training.backToProgram')}
+      />
 
-      <div className="grid gap-2">
+      <div className="border-t border-hairline">
         {phase.weeks.map((week, i) => (
           <WeekSection
             key={week.id}
