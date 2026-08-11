@@ -21,7 +21,7 @@ export function TimerRing({ progress, mode, children }: TimerRingProps) {
           cx={60}
           cy={60}
           r={54}
-          className="stroke-accent"
+          className="stroke-glass-strong"
           strokeWidth={strokeWidth}
           fill="none"
           pathLength={360}
@@ -33,7 +33,9 @@ export function TimerRing({ progress, mode, children }: TimerRingProps) {
             cx={60}
             cy={60}
             r={54}
-            className="stroke-primary transition-[stroke-dasharray] duration-1000 ease-linear"
+            // The glow is what keeps the arc from disappearing into the
+            // glass it sits on; it follows the accent like the stroke does.
+            className="stroke-primary transition-[stroke-dasharray] duration-1000 ease-linear [filter:drop-shadow(0_0_6px_var(--ambient-strong))]"
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"

@@ -39,6 +39,12 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+    /* Glass surfaces exposed as colors so they compose with every Tailwind
+       color utility: `bg-glass`, `border-glass-border`, `divide-hairline`. */
+    --color-glass: var(--glass-fill);
+    --color-glass-strong: var(--glass-fill-strong);
+    --color-glass-border: var(--glass-border);
+    --color-hairline: var(--hairline);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -93,6 +99,11 @@
     --glass-border: oklch(1 0 0 / 12%);
     --glass-highlight: oklch(1 0 0 / 22%);
     --glass-blur: 24px;
+    /* Fills above are lighter than the page, which works when the page is
+       what shows through. Anything that floats over scrolling content (nav,
+       dialogs, dropdowns) needs to darken instead, or the text underneath
+       bleeds into the text on top. */
+    --glass-scrim: color-mix(in oklab, var(--background) 72%, transparent);
     /* Separator for row lists and section rules: the default shape of a
        block is a hairline, not a box. */
     --hairline: oklch(1 0 0 / 8%);
@@ -186,13 +197,19 @@
    - `glass-subtle`   fill + border only, no backdrop-filter. Chips, inputs,
                       icon tiles, selectable rows. Cheap enough to repeat.
    - `glass-elevated` the standard panel: blur, saturation and a top
-                      highlight. Header, nav, dialogs, alerts.
+                      highlight. Alerts, tiles, panels on the page.
    - `glass-hero`     the focal panel of a screen (the timer). Stronger fill
                       and an accent-tinted inner glow.
+   - `glass-overlay`  the same material darkened, for things that float over
+                      scrolling content: the nav, dialogs, dropdowns.
 
-   Only the last two carry `backdrop-filter`, and a screen should hold a
+   Only the last three carry `backdrop-filter`, and a screen should hold a
    handful of them at most — stacking blurred layers is what makes this
-   material expensive on mobile Safari. */
+   material expensive on mobile Safari.
+
+   None of them set `position`, so they compose with `fixed`/`absolute`
+   without depending on which rule Tailwind emits last. `glass-lit` does
+   need a positioned parent; add `relative` alongside it. */
 
 @utility glass-subtle {
     background: var(--glass-fill);
@@ -200,15 +217,20 @@
 }
 
 @utility glass-elevated {
-    position: relative;
     background: var(--glass-fill);
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(var(--glass-blur)) saturate(140%);
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
 }
 
+@utility glass-overlay {
+    background: var(--glass-scrim);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(26px) saturate(150%);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+}
+
 @utility glass-hero {
-    position: relative;
     background: var(--glass-fill-strong);
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(28px) saturate(150%);
@@ -239,6 +261,7 @@
     :root {
         --glass-fill: oklch(0.28 0.006 240 / 82%);
         --glass-fill-strong: oklch(0.32 0.008 240 / 88%);
+        --glass-scrim: oklch(0.17 0.003 240 / 95%);
     }
 }
 
@@ -248,6 +271,7 @@
     :root {
         --glass-fill: oklch(0.21 0.004 240);
         --glass-fill-strong: oklch(0.25 0.005 240);
+        --glass-scrim: oklch(0.17 0.003 240);
         --glass-blur: 0px;
         --ambient-strong: transparent;
         --ambient-soft: transparent;
