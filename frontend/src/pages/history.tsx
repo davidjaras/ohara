@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pencil, Timer, Trash2 } from 'lucide-react'
-import { api, type Session } from '@/lib/api'
+import { api, type Session, type Stats } from '@/lib/api'
 import { MAX_DAY_MINUTES, METRIC_ESTUDIO } from '@/lib/constants'
 import { formatLongDate, formatMinutes, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +16,18 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { WeeklyChart } from '@/components/charts'
+import { EmptyState } from '@/components/empty-state'
+import { IconTile } from '@/components/icon-tile'
+import { Pill } from '@/components/pill'
+import { RangeSelect } from '@/components/range-select'
+import { Section } from '@/components/section'
+import { WeekList } from '@/components/week-list'
 import { useLayoutContext } from '@/components/layout'
+
+// 12 weeks (a quarter) reads at a glance; 4 zooms into the current month and
+// 26/52 give the half-year and full-year picture.
+const WEEK_RANGES = [4, 12, 26, 52]
 
 type EntryDraft = { date: string; minutes: string; note: string }
 
@@ -121,23 +131,15 @@ function ManualEntryForm({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('history.manualTitle')}</CardTitle>
-        <CardDescription>{t('history.manualDescription')}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <EntryFields idPrefix="entry" draft={draft} onChange={setDraft} />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div>
-            <Button type="submit" disabled={saving || !draft.minutes}>
-              {saving ? t('history.saving') : t('history.save')}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      <EntryFields idPrefix="entry" draft={draft} onChange={setDraft} />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div>
+        <Button type="submit" disabled={saving || !draft.minutes}>
+          {saving ? t('history.saving') : t('history.save')}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -209,7 +211,7 @@ function EditEntryDialog({
             {t('history.cancel')}
           </Button>
           <Button onClick={handleSave} disabled={saving || !draft.minutes}>
-            {saving ? t('history.saving') : t('history.save')}
+            {t('history.save')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -235,36 +237,26 @@ function SessionList({
   }
 
   if (sessions.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">{t('history.empty')}</p>
-    )
+    return <EmptyState>{t('history.empty')}</EmptyState>
   }
 
   return (
     <>
       {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
-      <ul className="divide-y">
+      <ul className="divide-y divide-hairline">
         {sessions.map((session) => (
           <li key={session.id} className="flex items-start gap-3 py-3">
-            <div className="mt-0.5 rounded-md bg-accent p-2">
-              <Timer className="size-4 text-muted-foreground" />
-            </div>
+            <IconTile tone="muted" className="mt-0.5">
+              <Timer className="size-4" />
+            </IconTile>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
                 {formatLongDate(session.date)}
-                <span className="ml-2 whitespace-nowrap text-primary">
+                <span className="whitespace-nowrap text-primary">
                   {formatMinutes(session.minutes)}
                 </span>
-                {!session.started_at && (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {t('history.manualTag')}
-                  </span>
-                )}
-                {session.close_reason && (
-                  <span className="ml-2 text-xs italic text-muted-foreground">
-                    {t('history.estimatedTag')}
-                  </span>
-                )}
+                {!session.started_at && <Pill>{t('history.manualTag')}</Pill>}
+                {session.close_reason && <Pill>{t('history.estimatedTag')}</Pill>}
               </p>
               {session.note && (
                 <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
@@ -297,10 +289,17 @@ function SessionList({
   )
 }
 
+/**
+ * The screen that holds the record: the shape of the last weeks, which of them
+ * met their goal, and every session behind those numbers. The dashboard used
+ * to carry the first two, which made it a report instead of a starting point.
+ */
 export function HistoryPage() {
   const { t } = useTranslation()
   const { refreshStreak } = useLayoutContext()
   const [sessions, setSessions] = useState<Session[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [weeks, setWeeks] = useState(12)
   const [editing, setEditing] = useState<Session | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -308,31 +307,73 @@ export function HistoryPage() {
     api.sessions.list(METRIC_ESTUDIO).then(setSessions, (e: Error) => setError(e.message))
   }, [])
 
+  const loadStats = useCallback(() => {
+    api.stats(METRIC_ESTUDIO, weeks).then(setStats, (e: Error) => setError(e.message))
+  }, [weeks])
+
   useEffect(load, [load])
+  useEffect(loadStats, [loadStats])
 
   // Adding, editing or removing a session can change which weeks met their
-  // goal, so reload the list and refresh the navbar streak together.
+  // goal, so reload the list, the weekly aggregates and the streak together.
   const reload = useCallback(() => {
     load()
+    loadStats()
     refreshStreak()
-  }, [load, refreshStreak])
+  }, [load, loadStats, refreshStreak])
 
   return (
-    <div className="grid gap-4 sm:gap-5">
-      <ManualEntryForm onSaved={reload} />
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('history.sessionsTitle')}</CardTitle>
-          <CardDescription>{t('history.sessionsDescription')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <p className="text-sm text-destructive">{error}</p>
-          ) : (
-            <SessionList sessions={sessions} onEdit={setEditing} onDeleted={reload} />
-          )}
-        </CardContent>
-      </Card>
+    <div className="grid gap-8">
+      <Section
+        title={t('weeklyChart.title')}
+        description={t('weeklyChart.description')}
+        action={
+          <RangeSelect
+            options={WEEK_RANGES.map((n) => ({
+              value: n,
+              label: t('ranges.weeks', { count: n }),
+            }))}
+            value={weeks}
+            onChange={setWeeks}
+          />
+        }
+      >
+        {stats ? (
+          <WeeklyChart data={stats.weekly} />
+        ) : (
+          <EmptyState>{t('timer.loading')}</EmptyState>
+        )}
+      </Section>
+
+      {stats && stats.weekly.length > 0 && (
+        <Section
+          title={t('weekList.title')}
+          description={t('weekList.goal', {
+            goal: formatMinutes(stats.week_goal_minutes),
+          })}
+        >
+          <WeekList
+            weeks={stats.weekly.slice(-8)}
+            currentWeekStart={stats.weekly[stats.weekly.length - 1].week_start}
+          />
+        </Section>
+      )}
+
+      <Section title={t('history.manualTitle')} description={t('history.manualDescription')}>
+        <ManualEntryForm onSaved={reload} />
+      </Section>
+
+      <Section
+        title={t('history.sessionsTitle')}
+        description={t('history.sessionsDescription')}
+      >
+        {error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : (
+          <SessionList sessions={sessions} onEdit={setEditing} onDeleted={reload} />
+        )}
+      </Section>
+
       <EditEntryDialog session={editing} onClose={() => setEditing(null)} onSaved={reload} />
     </div>
   )

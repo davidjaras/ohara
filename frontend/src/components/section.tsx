@@ -24,18 +24,21 @@ export function Section({ title, description, action, className, children }: Sec
   return (
     <section className={cn('grid gap-3', className)}>
       {(title || action) && (
-        <div className="flex items-end justify-between gap-3 border-b border-hairline pb-2">
-          <div className="grid min-w-0 gap-1">
+        <div className="border-b border-hairline pb-2">
+          {/* The action rides the label line and the description gets the
+              full width under it — a description squeezed into the space a
+              range selector leaves over turns into a column of two words. */}
+          <div className="flex items-center justify-between gap-3">
             {title && (
-              <h2 className="text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
+              <h2 className="min-w-0 truncate text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
                 {title}
               </h2>
             )}
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
-            )}
+            {action && <div className="shrink-0">{action}</div>}
           </div>
-          {action && <div className="shrink-0">{action}</div>}
+          {description && (
+            <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
+          )}
         </div>
       )}
       {children}
