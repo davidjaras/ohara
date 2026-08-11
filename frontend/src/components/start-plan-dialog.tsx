@@ -108,10 +108,10 @@ export function StartPlanDialog({
                 type="button"
                 onClick={() => setVariantId(variant.id)}
                 className={cn(
-                  'rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                  'rounded-xl border px-3 py-2.5 text-left text-sm transition-colors',
                   variant.id === variantId
-                    ? 'border-primary bg-accent'
-                    : 'hover:bg-accent/50',
+                    ? 'border-primary/50 bg-primary/15'
+                    : 'border-glass-border bg-glass hover:bg-glass-strong',
                 )}
               >
                 {routineLabel(variant, t)}

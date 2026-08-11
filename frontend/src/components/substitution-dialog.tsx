@@ -42,21 +42,23 @@ function OptionButton({
       type="button"
       onClick={onSelect}
       className={cn(
-        'w-full rounded-lg border px-3 py-2 text-left transition-colors',
-        selected ? 'border-primary bg-accent' : 'hover:bg-accent/50',
+        'w-full rounded-xl border px-3 py-2.5 text-left transition-colors',
+        selected
+          ? 'border-primary/50 bg-primary/15'
+          : 'border-glass-border bg-glass hover:bg-glass-strong',
       )}
     >
       <span className="block text-sm font-medium">{exercise.name}</span>
       <span className="mt-1 flex flex-wrap gap-1">
         {exercise.equipment_required.length === 0 ? (
-          <span className="rounded bg-accent px-1.5 py-0.5 text-xs text-muted-foreground">
+          <span className="glass-subtle rounded-full px-2 py-0.5 text-xs text-muted-foreground">
             {t('training.noEquipment')}
           </span>
         ) : (
           exercise.equipment_required.map((name) => (
             <span
               key={name}
-              className="rounded bg-accent px-1.5 py-0.5 text-xs text-muted-foreground"
+              className="glass-subtle rounded-full px-2 py-0.5 text-xs text-muted-foreground"
             >
               {name}
             </span>

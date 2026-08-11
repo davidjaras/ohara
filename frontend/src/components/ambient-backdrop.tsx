@@ -17,19 +17,24 @@
  */
 export function AmbientBackdrop() {
   return (
+    // The field tracks the content column rather than the viewport: anchored
+    // to the far corners of a wide screen it would light up empty margins and
+    // leave the panels with nothing to refract.
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div
-        className="absolute -top-32 -right-24 size-[min(30rem,85vw)] rounded-full"
-        style={{ background: 'radial-gradient(closest-side, var(--ambient-strong), transparent)' }}
-      />
-      <div
-        className="absolute top-[38%] -left-32 size-[min(26rem,80vw)] rounded-full"
-        style={{ background: 'radial-gradient(closest-side, var(--ambient-soft), transparent)' }}
-      />
-      <div
-        className="absolute -bottom-24 -right-20 size-[min(24rem,75vw)] rounded-full"
-        style={{ background: 'radial-gradient(closest-side, var(--ambient-neutral), transparent)' }}
-      />
+      <div className="relative mx-auto h-full w-full max-w-3xl">
+        <div
+          className="absolute -top-32 -right-24 size-[min(30rem,85vw)] rounded-full"
+          style={{ background: 'radial-gradient(closest-side, var(--ambient-strong), transparent)' }}
+        />
+        <div
+          className="absolute top-[38%] -left-32 size-[min(26rem,80vw)] rounded-full"
+          style={{ background: 'radial-gradient(closest-side, var(--ambient-soft), transparent)' }}
+        />
+        <div
+          className="absolute -bottom-24 -right-20 size-[min(24rem,75vw)] rounded-full"
+          style={{ background: 'radial-gradient(closest-side, var(--ambient-neutral), transparent)' }}
+        />
+      </div>
     </div>
   )
 }
