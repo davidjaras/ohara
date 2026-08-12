@@ -181,7 +181,7 @@ export function DashboardPage() {
     : 0
 
   return (
-    <div className="page-stack gap-6">
+    <div className="page-stack gap-10 sm:gap-12">
       <SessionReviewBanner
         metric={METRIC_ESTUDIO}
         refreshKey={reviewKey}

@@ -76,7 +76,7 @@ export function TrainingPage() {
   }
 
   return (
-    <div className="page-stack gap-8">
+    <div className="page-stack gap-10 sm:gap-12">
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {run && (

@@ -50,7 +50,7 @@ export function TrainingProgramPage() {
   const hasRoutines = detail.variants.length > 1
 
   return (
-    <div className="page-stack gap-8">
+    <div className="page-stack gap-10 sm:gap-12">
       <PageHeader
         title={detail.name}
         subtitle={detail.coach ? t('training.coach', { coach: detail.coach }) : undefined}
