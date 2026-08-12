@@ -98,7 +98,7 @@ function TrainingRow() {
     : `/training/${run.program.slug}`
 
   return (
-    <div className="grid gap-3 border-y border-hairline py-3">
+    <div className="grid min-w-0 gap-3 border-y border-hairline py-3">
       <Link
         to={dayHref}
         className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-1 transition-colors hover:bg-glass"
@@ -181,7 +181,7 @@ export function DashboardPage() {
     : 0
 
   return (
-    <div className="grid gap-6">
+    <div className="page-stack gap-6">
       <SessionReviewBanner
         metric={METRIC_ESTUDIO}
         refreshKey={reviewKey}

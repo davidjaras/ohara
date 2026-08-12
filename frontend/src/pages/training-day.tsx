@@ -641,7 +641,7 @@ export function TrainingDayPage() {
   const status = dayStatus(day)
 
   return (
-    <div className="grid gap-5">
+    <div className="page-stack gap-5">
       <PageHeader
         title={day.name}
         subtitle={[

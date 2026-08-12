@@ -323,7 +323,7 @@ export function HistoryPage() {
   }, [load, loadStats, refreshStreak])
 
   return (
-    <div className="grid gap-8">
+    <div className="page-stack gap-8">
       <Section
         title={t('weeklyChart.title')}
         description={t('weeklyChart.description')}

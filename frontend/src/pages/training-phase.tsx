@@ -150,7 +150,7 @@ export function TrainingPhasePage() {
   )
 
   return (
-    <div className="grid gap-6">
+    <div className="page-stack gap-6">
       <PageHeader
         title={
           <>

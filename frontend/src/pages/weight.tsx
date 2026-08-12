@@ -178,7 +178,7 @@ export function WeightPage() {
   }
 
   return (
-    <div className="grid gap-8">
+    <div className="page-stack gap-8">
       <Section title={t('weight.formTitle')} description={t('weight.formDescription')}>
         <WeightForm onSaved={load} />
       </Section>
