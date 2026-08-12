@@ -14,7 +14,7 @@ export function WeekList({ weeks, currentWeekStart }: WeekListProps) {
   const { t } = useTranslation()
   const rows = [...weeks].reverse()
   return (
-    <ul className="divide-y">
+    <ul className="divide-y divide-hairline">
       {rows.map((week) => {
         const isCurrent = week.week_start === currentWeekStart
         return (
@@ -22,7 +22,7 @@ export function WeekList({ weeks, currentWeekStart }: WeekListProps) {
             {week.met ? (
               <CheckCircle2 className="size-5 shrink-0 text-primary" />
             ) : (
-              <Circle className="size-5 shrink-0 text-muted-foreground/40" />
+              <Circle className="size-5 shrink-0 text-muted-foreground/30" />
             )}
             <div className="min-w-0 flex-1">
               <p className={cn('text-sm font-medium', isCurrent && 'text-primary')}>

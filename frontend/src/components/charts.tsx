@@ -18,9 +18,9 @@ import { formatDayTick, formatMinutes, formatShortDate, formatWeekRange } from '
 // Colors come from the theme so charts follow the design tokens.
 const MET = 'var(--chart-1)' // azure: goal reached
 const BELOW = 'var(--chart-2)' // neutral gray: below the goal
-const GRID = 'oklch(1 0 0 / 7%)'
+const GRID = 'var(--hairline)'
 const TICK = { fill: 'var(--muted-foreground)', fontSize: 12 }
-const HOVER_CURSOR = { fill: 'oklch(1 0 0 / 6%)' }
+const HOVER_CURSOR = { fill: 'var(--glass-fill)' }
 
 interface TooltipRow {
   title: string
@@ -29,7 +29,7 @@ interface TooltipRow {
 
 function ChartTooltip({ title, lines }: TooltipRow) {
   return (
-    <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-md">
+    <div className="glass-overlay rounded-xl px-3 py-2 text-xs shadow-lg">
       <p className="mb-1 font-medium text-foreground">{title}</p>
       {lines.map((line) => (
         <p key={line} className="text-muted-foreground">

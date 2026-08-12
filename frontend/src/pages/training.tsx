@@ -5,51 +5,49 @@ import { ChevronRight } from 'lucide-react'
 import { api, type Program, type ProgramRun } from '@/lib/api'
 import { formatShortDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/empty-state'
+import { Panel } from '@/components/panel'
+import { Pill } from '@/components/pill'
+import { ProgressBar } from '@/components/progress-bar'
+import { Section } from '@/components/section'
 import { useLayoutContext } from '@/components/layout'
 import { StartPlanDialog } from '@/components/start-plan-dialog'
 
-/** The plan in progress: its dates, how much of it is done, a way in. */
-function ActivePlanCard({ run }: { run: ProgramRun }) {
+/**
+ * The plan in progress: its dates, how much of it is done, a way in. The one
+ * panel on this screen — everything else is a program you could start, and
+ * this is the one you did.
+ */
+function ActivePlanPanel({ run }: { run: ProgramRun }) {
   const { t } = useTranslation()
   const done = run.adherence?.done ?? 0
   const planned = run.adherence?.planned ?? 0
-  const progress = planned > 0 ? Math.min(100, (done / planned) * 100) : 0
+  const progress = planned > 0 ? (done / planned) * 100 : 0
 
   return (
-    <Card>
-      <Link
-        to={`/training/${run.program.slug}`}
-        className="block transition-colors hover:bg-accent/40"
-      >
-        <CardHeader className="flex items-center gap-3">
-          <div className="grid min-w-0 flex-1 gap-1">
-            <CardTitle className="truncate">{run.program.name}</CardTitle>
-            <CardDescription>
-              {t('training.planDates', {
-                start: formatShortDate(run.started_on),
-                end: formatShortDate(run.ends_on),
-              })}
-            </CardDescription>
-          </div>
-          <span className="shrink-0 rounded bg-primary/15 px-2 py-0.5 text-xs text-primary">
-            {t('training.cardWeekOf', { week: run.plan_week, total: run.total_weeks })}
-          </span>
-          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-        </CardHeader>
-      </Link>
-      <CardContent className="grid gap-2">
-        <div className="h-2 overflow-hidden rounded-full bg-accent">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${progress}%` }}
-          />
+    <Panel className="p-4">
+      <Link to={`/training/${run.program.slug}`} className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold">{run.program.name}</p>
+          <p className="truncate text-sm text-muted-foreground">
+            {t('training.planDates', {
+              start: formatShortDate(run.started_on),
+              end: formatShortDate(run.ends_on),
+            })}
+          </p>
         </div>
+        <Pill tone="accent">
+          {t('training.cardWeekOf', { week: run.plan_week, total: run.total_weeks })}
+        </Pill>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+      </Link>
+      <div className="mt-3 grid gap-2">
+        <ProgressBar value={progress} />
         <p className="text-sm text-muted-foreground">
           {t('training.planProgress', { done, planned })}
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   )
 }
 
@@ -74,81 +72,63 @@ export function TrainingPage() {
   useEffect(load, [load])
 
   if (error && !programs) {
-    return <p className="py-10 text-center text-sm text-destructive">{error}</p>
+    return <EmptyState tone="error">{error}</EmptyState>
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-lg gap-4">
-      <div className="grid gap-1">
-        <h1 className="text-lg font-semibold">{t('training.programsTitle')}</h1>
-        <p className="text-sm text-muted-foreground">{t('training.programsDescription')}</p>
-      </div>
-
+    <div className="grid gap-8">
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {run && (
-        <div className="grid gap-2">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            {t('training.planTitle')}
-          </h2>
-          <ActivePlanCard run={run} />
-        </div>
+        <Section title={t('training.planTitle')}>
+          <ActivePlanPanel run={run} />
+        </Section>
       )}
 
-      {programs === null ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">{t('training.loading')}</p>
-      ) : programs.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {t('training.programsEmpty')}
-        </p>
-      ) : (
-        <div className="grid gap-3">
-          {programs.map((program) => {
-            const isActive = program.slug === run?.program.slug
-            const subtitle = [
-              program.coach ? t('training.coach', { coach: program.coach }) : '',
-              program.variants.length > 1
-                ? t('training.routineCount', { count: program.variants.length })
-                : t('training.planWeeks', { count: program.variants[0]?.total_weeks ?? 0 }),
-            ]
-              .filter(Boolean)
-              .join(' · ')
+      <Section
+        title={t('training.programsTitle')}
+        description={t('training.programsDescription')}
+      >
+        {programs === null ? (
+          <EmptyState>{t('training.loading')}</EmptyState>
+        ) : programs.length === 0 ? (
+          <EmptyState>{t('training.programsEmpty')}</EmptyState>
+        ) : (
+          <ul className="divide-y divide-hairline">
+            {programs.map((program) => {
+              const isActive = program.slug === run?.program.slug
+              const subtitle = [
+                program.coach ? t('training.coach', { coach: program.coach }) : '',
+                program.variants.length > 1
+                  ? t('training.routineCount', { count: program.variants.length })
+                  : t('training.planWeeks', { count: program.variants[0]?.total_weeks ?? 0 }),
+              ]
+                .filter(Boolean)
+                .join(' · ')
 
-            return (
-              <Card key={program.id}>
-                <Link
-                  to={`/training/${program.slug}`}
-                  className="block transition-colors hover:bg-accent/40"
-                >
-                  <CardHeader className="flex items-center gap-3">
-                    <div className="grid min-w-0 flex-1 gap-1">
-                      <CardTitle>{program.name}</CardTitle>
-                      {subtitle && <CardDescription>{subtitle}</CardDescription>}
+              return (
+                <li key={program.id} className="flex items-center gap-3 py-3">
+                  <Link to={`/training/${program.slug}`} className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{program.name}</p>
+                      {subtitle && (
+                        <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
+                      )}
                     </div>
-                    {isActive && (
-                      <span className="shrink-0 rounded bg-primary/15 px-2 py-0.5 text-xs text-primary">
-                        {t('training.activeProgramTag')}
-                      </span>
-                    )}
-                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-                  </CardHeader>
-                </Link>
-                {!isActive && (
-                  <CardContent>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStarting(program)}
-                    >
+                    {isActive && <Pill tone="accent">{t('training.activeProgramTag')}</Pill>}
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                  {!isActive && (
+                    <Button variant="outline" size="sm" onClick={() => setStarting(program)}>
                       {t('training.startPlan')}
                     </Button>
-                  </CardContent>
-                )}
-              </Card>
-            )
-          })}
-        </div>
-      )}
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Section>
 
       <StartPlanDialog
         program={starting}

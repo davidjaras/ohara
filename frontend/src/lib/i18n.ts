@@ -14,7 +14,10 @@ const es = {
     history: 'Historial',
     weight: 'Peso',
     settings: 'Ajustes',
-    training: 'Entrenamiento',
+    // Short on purpose: it is a column of the nav pill, and 'Entrenamiento'
+    // does not fit one on a phone.
+    training: 'Entreno',
+    greeting: 'Hola, {{name}}',
   },
   stats: {
     streak: 'Racha',
@@ -41,6 +44,8 @@ const es = {
     save: 'Guardar sesión',
     saving: 'Guardando…',
     loading: 'Cargando…',
+    heroLabel: 'Cronómetro',
+    ready: 'Listo para empezar',
     presetMinutes: '{{count}} min',
     custom: 'Otra',
     customMinutes: 'Duración en minutos',
@@ -306,6 +311,7 @@ const en: typeof es = {
     weight: 'Weight',
     settings: 'Settings',
     training: 'Training',
+    greeting: 'Hi, {{name}}',
   },
   stats: {
     streak: 'Streak',
@@ -332,6 +338,8 @@ const en: typeof es = {
     save: 'Save session',
     saving: 'Saving…',
     loading: 'Loading…',
+    heroLabel: 'Focus timer',
+    ready: 'Ready to start',
     presetMinutes: '{{count}} min',
     custom: 'Other',
     customMinutes: 'Duration in minutes',

@@ -14,10 +14,12 @@ import { api, type Measurement } from '@/lib/api'
 import { METRIC_PESO } from '@/lib/constants'
 import { formatLongDate, formatShortDate, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EmptyState } from '@/components/empty-state'
+import { IconTile } from '@/components/icon-tile'
 import { RangeSelect } from '@/components/range-select'
+import { Section } from '@/components/section'
 
 type WeightRange = '1m' | '3m' | '1y' | 'all'
 
@@ -48,15 +50,13 @@ function WeightChart({ data, range }: { data: Measurement[]; range: WeightRange 
   }, [data, range])
 
   if (points.length < 2) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">{t('weight.needTwo')}</p>
-    )
+    return <EmptyState>{t('weight.needTwo')}</EmptyState>
   }
 
   return (
     <ResponsiveContainer width="100%" height={220}>
       <LineChart data={points} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid vertical={false} stroke="oklch(1 0 0 / 7%)" />
+        <CartesianGrid vertical={false} stroke="var(--hairline)" />
         <XAxis
           dataKey="date"
           tickFormatter={formatShortDate}
@@ -78,7 +78,7 @@ function WeightChart({ data, range }: { data: Measurement[]; range: WeightRange 
             if (!active || !payload?.length) return null
             const point = payload[0].payload as { date: string; value: number }
             return (
-              <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-md">
+              <div className="glass-overlay rounded-xl px-3 py-2 text-xs shadow-lg">
                 <p className="mb-1 font-medium text-foreground">{formatShortDate(point.date)}</p>
                 <p className="text-muted-foreground">{point.value.toFixed(1)} kg</p>
               </div>
@@ -123,48 +123,40 @@ function WeightForm({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('weight.formTitle')}</CardTitle>
-        <CardDescription>{t('weight.formDescription')}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="weight-date">{t('weight.date')}</Label>
-              <Input
-                id="weight-date"
-                type="date"
-                value={date}
-                max={todayISO()}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="weight-value">{t('weight.value')}</Label>
-              <Input
-                id="weight-value"
-                type="number"
-                step="0.1"
-                min={1}
-                placeholder="78.4"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div>
-            <Button type="submit" disabled={saving || !value}>
-              {saving ? t('weight.saving') : t('weight.save')}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="weight-date">{t('weight.date')}</Label>
+          <Input
+            id="weight-date"
+            type="date"
+            value={date}
+            max={todayISO()}
+            onChange={(e) => setDate(e.target.value)}
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="weight-value">{t('weight.value')}</Label>
+          <Input
+            id="weight-value"
+            type="number"
+            step="0.1"
+            min={1}
+            placeholder="78.4"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            required
+          />
+        </div>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div>
+        <Button type="submit" disabled={saving || !value}>
+          {saving ? t('weight.saving') : t('weight.save')}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -186,14 +178,15 @@ export function WeightPage() {
   }
 
   return (
-    <div className="grid gap-4 sm:gap-5">
-      <WeightForm onSaved={load} />
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-          <div className="grid gap-1.5">
-            <CardTitle>{t('weight.chartTitle')}</CardTitle>
-            <CardDescription>{t('weight.chartDescription')}</CardDescription>
-          </div>
+    <div className="grid gap-8">
+      <Section title={t('weight.formTitle')} description={t('weight.formDescription')}>
+        <WeightForm onSaved={load} />
+      </Section>
+
+      <Section
+        title={t('weight.chartTitle')}
+        description={t('weight.chartDescription')}
+        action={
           <RangeSelect
             options={[
               { value: '1m' as const, label: t('ranges.month') },
@@ -204,48 +197,42 @@ export function WeightPage() {
             value={range}
             onChange={setRange}
           />
-        </CardHeader>
-        <CardContent>
-          <WeightChart data={rows} range={range} />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('weight.listTitle')}</CardTitle>
-          <CardDescription>{t('weight.listDescription')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
-          {rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t('weight.empty')}</p>
-          ) : (
-            <ul className="divide-y">
-              {rows.map((row) => (
-                <li key={row.id} className="flex items-center gap-3 py-3">
-                  <div className="rounded-md bg-accent p-2">
-                    <Scale className="size-4 text-muted-foreground" />
-                  </div>
-                  <p className="min-w-0 flex-1 text-sm font-medium">
-                    {formatLongDate(row.date)}
-                    <span className="ml-2 whitespace-nowrap text-primary">
-                      {Number(row.value).toFixed(1)} kg
-                    </span>
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDelete(row)}
-                    aria-label={t('weight.deleteLabel')}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+        }
+      >
+        <WeightChart data={rows} range={range} />
+      </Section>
+
+      <Section title={t('weight.listTitle')} description={t('weight.listDescription')}>
+        {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+        {rows.length === 0 ? (
+          <EmptyState>{t('weight.empty')}</EmptyState>
+        ) : (
+          <ul className="divide-y divide-hairline">
+            {rows.map((row) => (
+              <li key={row.id} className="flex items-center gap-3 py-3">
+                <IconTile tone="muted">
+                  <Scale className="size-4" />
+                </IconTile>
+                <p className="min-w-0 flex-1 text-sm font-medium">
+                  {formatLongDate(row.date)}
+                  <span className="ml-2 whitespace-nowrap text-primary">
+                    {Number(row.value).toFixed(1)} kg
+                  </span>
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => handleDelete(row)}
+                  aria-label={t('weight.deleteLabel')}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
     </div>
   )
 }

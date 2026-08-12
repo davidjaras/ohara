@@ -5,6 +5,7 @@ import { Dumbbell, Flame, History, LayoutDashboard, Scale, Settings } from 'luci
 import { api, type Stats, type TrainingProfile } from '@/lib/api'
 import { setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
+import { AmbientBackdrop } from '@/components/ambient-backdrop'
 import { OharaLogo } from '@/components/brand/OharaLogo'
 
 const METRIC = 'estudio'
@@ -44,58 +45,42 @@ function navItems(trainingEnabled: boolean) {
   ]
 }
 
-function DesktopNav({ trainingEnabled }: { trainingEnabled: boolean }) {
+/**
+ * The one navigation surface of the app: a floating glass pill, at the bottom
+ * on a phone and centered at the top on a wider screen. Same component, same
+ * items, same icon-over-label shape either way — a desktop only gets a
+ * different position, never a different structure.
+ *
+ * It floats over the content rather than docking to an edge, which is why
+ * pages reserve `--nav-offset` at the bottom instead of padding by eye.
+ */
+function NavPill({ trainingEnabled }: { trainingEnabled: boolean }) {
   const { t } = useTranslation()
+  const items = navItems(trainingEnabled)
   return (
-    <nav className="hidden items-center gap-1 sm:flex">
-      {navItems(trainingEnabled).map(({ to, key, icon: Icon }) => (
+    <nav
+      className={cn(
+        'glass-overlay glass-lit fixed z-30 flex rounded-3xl px-1.5 py-1.5 shadow-xl',
+        'inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))]',
+        'sm:inset-x-auto sm:bottom-auto sm:top-4 sm:left-1/2 sm:-translate-x-1/2',
+      )}
+    >
+      {items.map(({ to, key, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
           end={to === '/'}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
+              'flex flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-1.5 text-[11px] font-medium transition-colors sm:w-20 sm:flex-none',
+              isActive ? 'bg-glass text-primary' : 'text-muted-foreground hover:text-foreground',
             )
           }
         >
-          <Icon className="size-4" />
+          <Icon className="size-5" />
           {t(key)}
         </NavLink>
       ))}
-    </nav>
-  )
-}
-
-function MobileTabBar({ trainingEnabled }: { trainingEnabled: boolean }) {
-  const { t } = useTranslation()
-  const items = navItems(trainingEnabled)
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur sm:hidden">
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
-      >
-        {items.map(({ to, key, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              cn(
-                'flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors',
-                isActive ? 'text-primary' : 'text-muted-foreground',
-              )
-            }
-          >
-            <Icon className="size-5" />
-            {t(key)}
-          </NavLink>
-        ))}
-      </div>
     </nav>
   )
 }
@@ -130,35 +115,33 @@ export function Layout() {
 
   return (
     <div className="min-h-svh">
-      <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <NavLink to="/" className="flex items-center gap-2 text-lg font-semibold">
-            <OharaLogo size={28} className="text-primary" />
-            ohara
-          </NavLink>
-          <div className="flex items-center gap-2">
-            <DesktopNav trainingEnabled={training !== null} />
-            {streakWeeks !== null && (
-              <span
-                className="ml-2 flex items-center gap-1 text-sm text-muted-foreground"
-                title={t('stats.streak')}
-              >
-                <Flame className={streakWeeks > 0 ? 'size-4 text-primary' : 'size-4'} />
-                {streakWeeks}
-              </span>
-            )}
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              {username}
+      <AmbientBackdrop />
+      {/* The column is centered and capped at a comfortable measure on every
+          width: the same layout scaled, not a separate desktop one. The top
+          padding on wider screens is what clears the floating nav. */}
+      <main className="mx-auto w-full max-w-xl px-4 pt-5 pb-[var(--nav-offset)] sm:pt-24 sm:pb-12">
+        <header className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <OharaLogo size={28} className="shrink-0 text-primary" />
+            <span className="truncate text-[15px] font-semibold">
+              {username ? t('nav.greeting', { name: username }) : 'ohara'}
             </span>
           </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:pb-10">
+          {streakWeeks !== null && (
+            <span
+              className="glass-subtle flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold"
+              title={t('stats.streak')}
+            >
+              <Flame className={streakWeeks > 0 ? 'size-4 text-primary' : 'size-4'} />
+              {streakWeeks}
+            </span>
+          )}
+        </header>
         <Outlet
           context={{ refreshStreak, training, refreshTraining } satisfies LayoutContext}
         />
       </main>
-      <MobileTabBar trainingEnabled={training !== null} />
+      <NavPill trainingEnabled={training !== null} />
     </div>
   )
 }

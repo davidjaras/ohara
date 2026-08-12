@@ -276,3 +276,42 @@ el scope es `session` y no llega ninguna.
 Sigue sin haber forma de deshacer una sustitución. Con el scope respetado un
 cambio de sesión se apaga solo, pero uno de programa encabeza ese slot hasta
 el final del plan: hace falta un DELETE, y es el siguiente paso.
+
+## Liquid glass: el material vive en tokens, no en componentes
+
+Toda la UI era la misma `Card` de shadcn repetida en cada bloque de cada
+pantalla. Cuando todo tiene la misma elevación, nada señala qué importa: en el
+panel el cronómetro pesaba lo mismo que la lista de semanas de hace dos meses.
+
+El material nuevo son cuatro utilidades en `index.css`, no estilos por
+componente: `glass-subtle` (relleno + borde, sin `backdrop-filter`),
+`glass-elevated` (el panel estándar), `glass-hero` (el foco de la pantalla) y
+`glass-overlay` (lo que flota sobre contenido que scrollea). Solo las tres
+últimas llevan `backdrop-filter` y una pantalla debe tener pocas: apilar capas
+desenfocadas es lo que vuelve caro este material en Safari móvil. Las filas y
+los chips usan `glass-subtle`, que no cuesta nada.
+
+**La capa ambiental no es decoración.** Sin color detrás, `backdrop-filter` no
+tiene nada que desenfocar y los paneles se leen como tarjetas grises planas —
+exactamente el problema del que veníamos. Está hecha con `radial-gradient` y no
+con `filter: blur()` sobre un círculo sólido: se ve igual y evita que el
+compositor rasterice una capa grande en cada pintado.
+
+**El acento sigue siendo `--primary`, y solo `--primary`.** Los campos
+ambientales se derivan con `color-mix(in oklab, var(--primary) 42%, transparent)`,
+así que los siete bloques `[data-accent]` quedaron intactos: definen `--primary`
+y el vidrio los sigue solo. Sin variantes nuevas por acento, sin `--accent-rgb`.
+
+**La regla de composición: el panel es la excepción.** El contenedor por
+defecto es una `Section` — etiqueta, filete, contenido directo sobre la página.
+Un panel significa "esto está por encima del resto", y se reserva para el
+cronómetro, el aviso de sesión por revisar, el plan en curso y las superseries
+del día de entreno, donde "estos dos ejercicios son una unidad" es todo el
+punto. Diez tarjetas entre Peso y Ajustes pasaron a diez secciones.
+
+**Lo que no se tocó, a propósito.** La tabla de series del día de entreno
+(`TABLE_GRID`) está afinada al rem para un teléfono; cambiar la altura de un
+input o el tamaño de fuente ahí rompe la fila. Solo cambió el cromo alrededor.
+
+`--nav-offset` existe porque el nav flota: las páginas y el temporizador de
+descanso reservan el mismo valor en vez de dos paddings elegidos a ojo.
