@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Dumbbell, Flame, History, LayoutDashboard, Scale, Settings } from 'lucide-react'
+import { Dumbbell, History, LayoutDashboard, Scale, Settings } from 'lucide-react'
 import { api, type Stats, type TrainingProfile } from '@/lib/api'
 import { setAccent, storedAccent } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { AmbientBackdrop } from '@/components/ambient-backdrop'
-import { OharaLogo } from '@/components/brand/OharaLogo'
 
 const METRIC = 'estudio'
 
 /** Handles the Layout shares with its routed pages through <Outlet>. */
 export interface LayoutContext {
-  /** Re-read the navbar streak after a session is saved or deleted. */
+  /** Signed-in user, for the dashboard greeting. Empty until it loads. */
+  username: string
+  /** Weeks met in a row; null while unknown. Shown only on the dashboard. */
+  streakWeeks: number | null
+  /** Re-read the streak after a session is saved or deleted. */
   refreshStreak: () => void
   /**
    * null while unknown or when the module is off (the profile endpoint answers
@@ -86,7 +89,6 @@ function NavPill({ trainingEnabled }: { trainingEnabled: boolean }) {
 }
 
 export function Layout() {
-  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [streakWeeks, setStreakWeeks] = useState<number | null>(null)
   const [training, setTraining] = useState<TrainingProfile | null>(null)
@@ -120,25 +122,16 @@ export function Layout() {
           width: the same layout scaled, not a separate desktop one. The top
           padding on wider screens is what clears the floating nav. */}
       <main className="mx-auto w-full max-w-xl px-4 pt-5 pb-[var(--nav-offset)] sm:pt-24 sm:pb-12">
-        <header className="mb-6 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <OharaLogo size={28} className="shrink-0 text-primary" />
-            <span className="truncate text-[15px] font-semibold">
-              {username ? t('nav.greeting', { name: username }) : 'ohara'}
-            </span>
-          </div>
-          {streakWeeks !== null && (
-            <span
-              className="glass-subtle flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold"
-              title={t('stats.streak')}
-            >
-              <Flame className={streakWeeks > 0 ? 'size-4 text-primary' : 'size-4'} />
-              {streakWeeks}
-            </span>
-          )}
-        </header>
         <Outlet
-          context={{ refreshStreak, training, refreshTraining } satisfies LayoutContext}
+          context={
+            {
+              username,
+              streakWeeks,
+              refreshStreak,
+              training,
+              refreshTraining,
+            } satisfies LayoutContext
+          }
         />
       </main>
       <NavPill trainingEnabled={training !== null} />
