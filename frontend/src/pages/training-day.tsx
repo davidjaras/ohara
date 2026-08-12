@@ -641,7 +641,9 @@ export function TrainingDayPage() {
   const status = dayStatus(day)
 
   return (
-    <div className="grid gap-5">
+    // Tighter than the other screens on purpose: this stack is a list of
+    // exercises you scroll through mid-workout, not a handful of sections.
+    <div className="page-stack gap-6 sm:gap-8">
       <PageHeader
         title={day.name}
         subtitle={[

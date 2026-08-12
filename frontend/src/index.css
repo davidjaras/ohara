@@ -211,6 +211,18 @@
    without depending on which rule Tailwind emits last. `glass-lit` does
    need a positioned parent; add `relative` alongside it. */
 
+/* The vertical stack a screen is built from. It is a grid, and grid items
+   default to `min-width: auto` — they refuse to shrink below their
+   min-content. Any `truncate` inside (white-space: nowrap) then makes a long
+   unbroken string the min-content of the whole column, and the page grows
+   wider than the viewport instead of ellipsizing. Pinning the single track to
+   `minmax(0, 1fr)` is what makes truncation actually truncate.
+   Pair it with the `gap-*` the screen wants. */
+@utility page-stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
 @utility glass-subtle {
     background: var(--glass-fill);
     border: 1px solid var(--glass-border);

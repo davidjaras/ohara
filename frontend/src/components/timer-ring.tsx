@@ -15,7 +15,7 @@ export function TimerRing({ progress, mode, children }: TimerRingProps) {
   const strokeWidth = mode === 'planned' ? 7 : 3.5
 
   return (
-    <div className="relative size-56 sm:size-64">
+    <div className="relative size-44 sm:size-52">
       <svg viewBox="0 0 120 120" className="size-full -rotate-90">
         <circle
           cx={60}

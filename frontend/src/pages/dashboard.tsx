@@ -8,6 +8,7 @@ import { formatMinutes, formatShortDate, todayISO } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { CumulativeWeekChart } from '@/components/charts'
+import { DashboardHeader } from '@/components/dashboard-header'
 import { EmptyState } from '@/components/empty-state'
 import { IconTile } from '@/components/icon-tile'
 import { ProgressBar } from '@/components/progress-bar'
@@ -98,7 +99,7 @@ function TrainingRow() {
     : `/training/${run.program.slug}`
 
   return (
-    <div className="grid gap-3 border-y border-hairline py-3">
+    <div className="grid min-w-0 gap-3 border-y border-hairline py-3">
       <Link
         to={dayHref}
         className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-1 transition-colors hover:bg-glass"
@@ -181,38 +182,43 @@ export function DashboardPage() {
     : 0
 
   return (
-    <div className="grid gap-6">
-      <SessionReviewBanner
-        metric={METRIC_ESTUDIO}
-        refreshKey={reviewKey}
-        onResolved={handleSessionSaved}
-      />
-      <TimerCard metric={METRIC_ESTUDIO} onSessionSaved={handleSessionSaved} />
-      {training && <TrainingRow />}
+    <>
+      {/* Outside the stack, with its own margin: the greeting sits closer to
+          the timer than the blocks below sit to each other. */}
+      <DashboardHeader />
+      <div className="page-stack gap-10 sm:gap-12">
+        <SessionReviewBanner
+          metric={METRIC_ESTUDIO}
+          refreshKey={reviewKey}
+          onResolved={handleSessionSaved}
+        />
+        <TimerCard metric={METRIC_ESTUDIO} onSessionSaved={handleSessionSaved} />
+        {training && <TrainingRow />}
 
-      {stats && (
-        <Section
-          title={t('weekProgress.title')}
-          action={
-            <span className="text-sm tabular-nums">
-              {/* The goal being met is the one fact worth an accent here. */}
-              <span className={cn('font-semibold', stats.week_met && 'text-primary')}>
-                {formatMinutes(stats.week_minutes)}
+        {stats && (
+          <Section
+            title={t('weekProgress.title')}
+            action={
+              <span className="text-sm tabular-nums">
+                {/* The goal being met is the one fact worth an accent here. */}
+                <span className={cn('font-semibold', stats.week_met && 'text-primary')}>
+                  {formatMinutes(stats.week_minutes)}
+                </span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  / {formatMinutes(stats.week_goal_minutes)}
+                </span>
               </span>
-              <span className="text-muted-foreground">
-                {' '}
-                / {formatMinutes(stats.week_goal_minutes)}
-              </span>
-            </span>
-          }
-        >
-          <ProgressBar value={weekProgress} />
-          <CumulativeWeekChart
-            data={stats.week_cumulative}
-            goal={stats.week_goal_minutes}
-          />
-        </Section>
-      )}
-    </div>
+            }
+          >
+            <ProgressBar value={weekProgress} />
+            <CumulativeWeekChart
+              data={stats.week_cumulative}
+              goal={stats.week_goal_minutes}
+            />
+          </Section>
+        )}
+      </div>
+    </>
   )
 }

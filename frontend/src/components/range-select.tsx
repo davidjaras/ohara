@@ -48,7 +48,7 @@ export function RangeSelect<T extends string | number>({
             className={cn(
               'shrink-0 rounded-full font-medium transition-colors',
               chips
-                ? 'border px-4 py-2 text-sm'
+                ? 'border px-3.5 py-1.5 text-sm'
                 : 'px-2.5 py-1 text-xs',
               selected
                 ? chips

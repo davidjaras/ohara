@@ -11,7 +11,9 @@ import { cn } from '@/lib/utils'
  * item that stands apart from a list (`elevated`), and groupings that need an
  * outline to read as one unit (`subtle`).
  */
-const panelVariants = cva('relative', {
+// `min-w-0` for the same reason as Section: a panel is usually a grid item of
+// the page stack, and without it any nowrap text inside widens the page.
+const panelVariants = cva('relative min-w-0', {
   variants: {
     variant: {
       subtle: 'glass-subtle rounded-2xl',

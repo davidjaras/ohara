@@ -29,7 +29,7 @@ const buttonVariants = cva(
         // The commitment button of a screen: starting a session, saving a
         // plan. Rounded like a panel rather than a control, so it reads as
         // part of the glass it sits on.
-        xl: "h-12 gap-2 rounded-2xl px-6 text-base [&_svg:not([class*='size-'])]:size-5",
+        xl: "h-11 gap-2 rounded-2xl px-5 text-base [&_svg:not([class*='size-'])]:size-5",
         icon: "size-8",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
