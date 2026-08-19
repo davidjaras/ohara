@@ -315,3 +315,60 @@ input o el tamaño de fuente ahí rompe la fila. Solo cambió el cromo alrededor
 
 `--nav-offset` existe porque el nav flota: las páginas y el temporizador de
 descanso reservan el mismo valor en vez de dos paddings elegidos a ojo.
+
+## Un slot es de una semana, no del programa
+
+`scope='program'` se guardaba, se respetaba… y aun así el ejercicio original
+volvía cada semana. El fallo no estaba en el scope sino en el modelo mental:
+`ExerciseSlot` cuelga de `WorkoutDay`, que cuelga de `Week`, y el cargador
+re-materializa la lista de días de la fase **dentro** del bucle de semanas. La
+semana 1 y la semana 2 de la misma fase son filas distintas con PKs distintos.
+`active_substitutions` filtraba `slot__in=slots` antes de aplicar el `Q` del
+scope, así que `program` significaba en realidad "todas las sesiones de esta
+semana". El comentario de `ExerciseSubstitution` afirmaba que el slot era
+"global (part of the program)"; nunca lo fue.
+
+**La clave es (variante, day.order, slot.order, ejercicio)**, en
+`services.sibling_slot_map`, y el ejercicio no sobra. Medido sobre la base real:
+dentro de una fase, las 609 posiciones prescriben el mismo ejercicio en todas
+sus semanas, así que exigir el ejercicio no cuesta ni una coincidencia. Entre
+fases es al revés: 37 de 39 posiciones se reutilizan y solo **1** conserva el
+ejercicio — la fase 2 pone otro press en `día 1 / slot 1`. Emparejar solo por
+posición habría cambiado en silencio ejercicios que nadie pidió cambiar. Así
+que un cambio "de programa" viaja por todas las semanas de su fase siempre, y
+salta de fase únicamente donde el programa vuelve a prescribir ese ejercicio en
+esa posición.
+
+`ExerciseSubstitution.original_exercise` guarda lo que se sustituyó en el
+momento de escribirlo. Es la mitad de la clave, y es lo que lee la etiqueta
+"en lugar de X": resuelta desde otra semana, la fila `slot` ya no es la que
+tienes delante.
+
+`active_substitutions` sigue siendo el único sitio donde se resuelve, con la
+misma firma y la misma forma de retorno, así que la tarjeta y
+`SetLog.performed_exercise` siguen saliendo de la misma consulta. La vista del
+día construye el mapa una vez y se lo pasa a los dos consumidores; el coste es
++3 consultas constantes sobre el día, sin cambiar la pendiente (que sigue
+siendo +1 por ejercicio, de `last_performances`, y es anterior a esto).
+
+**Ningún test lo veía** porque `build_program` venía por defecto con
+`weeks=1`: todas las pruebas de sustitución corrían contra un árbol de un solo
+slot, donde `ExerciseSlot.objects.get()` funciona precisamente porque no hay
+nada más. El fixture `multiweek_program` (2 fases × 3 semanas, con ejercicio
+propio por fase) es la forma mínima en la que el fallo se puede reproducir.
+
+**Deshacer ya existe** (`DELETE /api/training/slots/<pk>/substitutions/`), que
+era el paso pendiente que dejaba la nota anterior. Borra lo que
+`active_substitutions` resuelve para ese slot, no lo que apunte a esa fila: así
+deshaces lo que estabas viendo, y quitar un cambio de sesión destapa el de
+programa que había debajo en vez de llevárselo por delante.
+
+**`last_performed_exercise` es para el cambio que nunca registraste.** Si
+sustituiste "solo esta sesión" hace meses y desde entonces repites el sustituto
+a mano, la tarjeta lo dice — *"la última vez hiciste X"* — y al tocarlo abre el
+selector con X ya elegido y scope de programa. No retitula la tarjeta sola:
+mientras no elijas, el título sigue siendo la prescripción, que es lo que
+mantiene de acuerdo lo que ves y lo que se escribe al registrar una serie. Es
+un campo distinto de `last_performance`, que va indexado por ejercicio
+realizado y trae las series; este solo responde "aquí llevas tiempo haciendo
+otra cosa".

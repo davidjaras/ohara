@@ -86,18 +86,40 @@ class ExerciseSlotSerializer(serializers.ModelSerializer):
     # Filled by DayDetailView from a single lookup per exercise; None when the
     # exercise has never been logged.
     last_performance = serializers.SerializerMethodField()
+    # What was logged at this position last time, when it is not what the slot
+    # currently resolves to. Distinct from `last_performance`, which is keyed on
+    # the performed exercise and carries the sets: this one only answers "you
+    # have been doing something else here".
+    last_performed_exercise = serializers.SerializerMethodField()
 
     class Meta:
         model = ExerciseSlot
         fields = [
             "id", "order", "series_label", "series_position", "is_superset",
             "coach_annotation", "modifiers", "exercise", "sets",
-            "substitution", "last_performance",
+            "substitution", "last_performance", "last_performed_exercise",
         ]
 
     def get_substitution(self, slot):
         substitution = (self.context.get("substitutions") or {}).get(slot.pk)
         return SubstitutionSerializer(substitution).data if substitution else None
+
+    def get_last_performed_exercise(self, slot):
+        entry = (self.context.get("last_performed_exercises") or {}).get(slot.pk)
+        if entry is None:
+            return None
+        exercise, performed_on = entry
+        performed = (self.context.get("performed_exercises") or {}).get(
+            slot.pk, slot.exercise
+        )
+        # A hint that agrees with the card is noise; only the disagreement is
+        # worth a line.
+        if exercise.pk == performed.pk:
+            return None
+        return {
+            "exercise": ExerciseSerializer(exercise).data,
+            "performed_on": performed_on,
+        }
 
     def get_last_performance(self, slot):
         # Keyed on the performed exercise: a substituted slot shows the
@@ -273,10 +295,17 @@ class SubstitutionInputSerializer(serializers.Serializer):
 
 class SubstitutionSerializer(serializers.ModelSerializer):
     replacement = ExerciseSerializer(read_only=True)
+    # What the program prescribes where this swap applies. `slot` is the row the
+    # swap was written on, which for a program-scoped one need not be the week
+    # you are looking at — this field is what the "en lugar de X" label reads.
+    original_exercise = ExerciseSerializer(read_only=True)
 
     class Meta:
         model = ExerciseSubstitution
-        fields = ["id", "slot", "replacement", "scope", "session", "reason", "created_at"]
+        fields = [
+            "id", "slot", "replacement", "original_exercise", "scope", "session",
+            "reason", "created_at",
+        ]
 
 
 class SetLogSerializer(serializers.ModelSerializer):

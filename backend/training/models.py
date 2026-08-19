@@ -431,7 +431,9 @@ class SetLog(models.Model):
 
 
 class ExerciseSubstitution(models.Model):
-    # The slot is global (part of the program); the substitution is the USER'S.
+    # The slot belongs to the program; the substitution is the USER'S. Note the
+    # slot is per-WEEK, not per-program position: `services.sibling_slot_map`
+    # is what turns a PROGRAM-scoped row into every week's equivalent slot.
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="substitutions",
@@ -441,12 +443,21 @@ class ExerciseSubstitution(models.Model):
         ExerciseSlot, related_name="substitutions", on_delete=models.CASCADE
     )
     replacement = models.ForeignKey(Exercise, on_delete=models.PROTECT)
+    # What was replaced, snapshotted at write time. A PROGRAM-scoped swap only
+    # follows a position whose prescription is still this exercise, so a later
+    # phase reusing day 1 / slot 1 for a different lift is left alone.
+    original_exercise = models.ForeignKey(
+        Exercise, related_name="substitutions_replacing", on_delete=models.PROTECT
+    )
     scope = models.CharField(max_length=10, choices=SubstitutionScope.choices)
     session = models.ForeignKey(
         WorkoutSession, null=True, blank=True, on_delete=models.CASCADE
     )
     reason = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "scope"])]
 
     def __str__(self) -> str:
         return f"{self.user}: {self.slot} → {self.replacement.name}"

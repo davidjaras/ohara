@@ -148,6 +148,15 @@ export interface ExerciseSlot {
   /** The previous time the *performed* exercise was logged; excludes today's
    *  session, so the line never mirrors what was just typed. */
   last_performance: Performance | null
+  /** What was actually logged at this position last time, when it disagrees
+   *  with what the card resolves to — the swap you repeated but never
+   *  recorded. Null whenever it agrees, so a value always means something. */
+  last_performed_exercise: LastPerformedExercise | null
+}
+
+export interface LastPerformedExercise {
+  exercise: TrainingExercise
+  performed_on: string | null
 }
 
 export interface WorkoutDay {
@@ -267,8 +276,12 @@ export interface ExerciseHistory {
 
 export interface Substitution {
   id: number
+  /** The row the swap was written on. For a program-scoped one that is not
+   *  necessarily the week you are looking at — read `original_exercise`, not
+   *  this slot's prescription, when naming what is being replaced. */
   slot: number
   replacement: TrainingExercise
+  original_exercise: TrainingExercise
   scope: 'session' | 'program'
   session: number | null
   reason: string
@@ -504,6 +517,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    // Back to the prescription. Deletes whatever is in force for this slot, so
+    // undoing a one-off correctly leaves a standing swap in place.
+    unsubstitute: (slotId: number, sessionId?: number | null) =>
+      request<void>(
+        `/api/training/slots/${slotId}/substitutions/` +
+          (sessionId ? `?session=${sessionId}` : ''),
+        { method: 'DELETE' },
+      ),
     sessions: {
       list: () => request<WorkoutSession[]>('/api/training/sessions/'),
       get: (id: number) => request<WorkoutSessionDetail>(`/api/training/sessions/${id}/`),
