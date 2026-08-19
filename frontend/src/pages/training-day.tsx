@@ -312,7 +312,7 @@ function SlotBlock({
   logs: Map<string, SetLog>
   saving: boolean
   weightUnit: string
-  onSubstitute: () => void
+  onSubstitute: (preselect?: number) => void
   onOpenRest: () => void
   onOpenTempoLegend: () => void
   onOpenHistory: (exercise: TrainingExercise) => void
@@ -338,8 +338,25 @@ function SlotBlock({
           </p>
           {substitution && (
             <p className="text-xs text-muted-foreground">
-              {t('training.insteadOf', { name: slot.exercise.name })}
+              {/* The swap's own snapshot, not this week's slot: a program-scoped
+                  swap is resolved from another week's row, and the two agree
+                  only because the match requires it. */}
+              {t('training.insteadOf', { name: substitution.original_exercise.name })}
             </p>
+          )}
+          {/* You have been doing something else here and never said so. Offer
+              it; do not retitle the card behind the user's back. */}
+          {!substitution && slot.last_performed_exercise && (
+            <button
+              type="button"
+              onClick={() => onSubstitute(slot.last_performed_exercise!.exercise.id)}
+              className="mt-1 flex items-center gap-1 text-xs text-primary transition-opacity hover:opacity-80"
+            >
+              <ArrowLeftRight className="size-3 shrink-0" />
+              {t('training.lastTimeYouDid', {
+                name: slot.last_performed_exercise.exercise.name,
+              })}
+            </button>
           )}
           {(slot.coach_annotation || perSide) && (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -388,7 +405,7 @@ function SlotBlock({
             variant="ghost"
             size="icon"
             className="size-8 text-muted-foreground"
-            onClick={onSubstitute}
+            onClick={() => onSubstitute()}
             aria-label={t('training.substitute')}
           >
             <ArrowLeftRight className="size-4" />
@@ -466,6 +483,9 @@ export function TrainingDayPage() {
   const [logs, setLogs] = useState<Map<string, SetLog>>(new Map())
   const [substitutions, setSubstitutions] = useState<Record<number, Substitution>>({})
   const [substituting, setSubstituting] = useState<ExerciseSlot | null>(null)
+  // Set only when the picker is opened from the "la última vez hiciste X"
+  // hint, so it opens on that exercise instead of on nothing.
+  const [preselect, setPreselect] = useState<number | null>(null)
   const [historyFor, setHistoryFor] = useState<TrainingExercise | null>(null)
   const [rest, setRest] = useState<RestRequest | null>(null)
   const [sessionId, setSessionId] = useState<number | null>(null)
@@ -630,6 +650,20 @@ export function TrainingDayPage() {
     [dayId, applyDay],
   )
 
+  const handleReverted = useCallback(
+    (slotId: number) => {
+      // Drop it optimistically, then refetch: undoing a one-off can uncover a
+      // program-scoped swap underneath, and only the server knows that.
+      setSubstitutions((prev) => {
+        const next = { ...prev }
+        delete next[slotId]
+        return next
+      })
+      api.training.day(Number(dayId)).then(applyDay, () => {})
+    },
+    [dayId, applyDay],
+  )
+
   if (error && !day) {
     return <EmptyState tone="error">{error}</EmptyState>
   }
@@ -696,7 +730,10 @@ export function TrainingDayPage() {
                   logs={logs}
                   saving={saving}
                   weightUnit={weightUnit}
-                  onSubstitute={() => setSubstituting(slot)}
+                  onSubstitute={(preselect) => {
+                    setPreselect(preselect ?? null)
+                    setSubstituting(slot)
+                  }}
                   onOpenRest={() => openRest(group, slot)}
                   onOpenTempoLegend={() => setTempoLegend(true)}
                   onOpenHistory={setHistoryFor}
@@ -716,7 +753,10 @@ export function TrainingDayPage() {
                 logs={logs}
                 saving={saving}
                 weightUnit={weightUnit}
-                onSubstitute={() => setSubstituting(group.slots[0])}
+                onSubstitute={(preselect) => {
+                  setPreselect(preselect ?? null)
+                  setSubstituting(group.slots[0])
+                }}
                 onOpenRest={() => openRest(group, group.slots[0])}
                 onOpenTempoLegend={() => setTempoLegend(true)}
                 onOpenHistory={setHistoryFor}
@@ -749,8 +789,10 @@ export function TrainingDayPage() {
       <SubstitutionDialog
         slot={substituting}
         sessionId={sessionId}
+        preselect={preselect}
         onClose={() => setSubstituting(null)}
         onSubstituted={handleSubstituted}
+        onReverted={handleReverted}
       />
 
       {rest && <RestTimer request={rest} onDismiss={() => setRest(null)} />}

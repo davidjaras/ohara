@@ -7,11 +7,14 @@ import pytest
 from training.models import (
     Exercise,
     ExerciseSlot,
+    ProgramAccess,
     ProgramVariant,
     SetLog,
     WorkoutDay,
     WorkoutSession,
 )
+
+from .conftest import build_program, slot_at
 
 pytestmark = pytest.mark.django_db
 
@@ -171,6 +174,251 @@ def test_program_scoped_substitution_applies_to_every_session(
             format="json",
         ).json()
         assert body["performed_exercise"] == "DB Lunge"
+
+
+def test_program_scoped_substitution_follows_the_slot_into_the_next_week(
+    client, enabled_profile, multiweek_access
+):
+    """The bug this fixture exists for.
+
+    A slot is per-week, so week 2 is a different row. Resolution used to be
+    gated on the slot id, which made "todo el programa" mean "every session of
+    this one week" — week after week the prescription came back.
+    """
+    first = slot_at(multiweek_access, phase=1, week=1)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    created = client.post(
+        f"/api/training/slots/{first.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+    assert created.status_code == 201
+
+    for week in (1, 2, 3):
+        slot = slot_at(multiweek_access, phase=1, week=week)
+        body = client.get(f"/api/training/days/{slot.day_id}/").json()["slots"][0]
+        assert body["substitution"]["replacement"]["name"] == "DB Lunge"
+        # The prescription stays visible underneath: it is what "en lugar de"
+        # reads, and on a later week it is not reachable through `slot`.
+        assert body["substitution"]["original_exercise"]["name"] == first.exercise.name
+        assert body["exercise"]["name"] == first.exercise.name
+
+
+def test_program_scoped_substitution_stops_where_the_prescription_changes(
+    client, enabled_profile, multiweek_access
+):
+    """Phase 2 reuses day 1 / slot 1 for a different lift. Matching on position
+    alone would silently replace an exercise the user never touched."""
+    first = slot_at(multiweek_access, phase=1, week=1)
+    later = slot_at(multiweek_access, phase=2, week=1)
+    assert first.exercise_id != later.exercise_id  # the fixture's whole point
+
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{first.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+
+    body = client.get(f"/api/training/days/{later.day_id}/").json()["slots"][0]
+    assert body["substitution"] is None
+    assert body["exercise"]["name"] == later.exercise.name
+
+
+def test_program_scoped_substitution_reaches_a_later_phase_prescribing_the_same(
+    client, user, enabled_profile
+):
+    """The other half of the rule: where the program does prescribe the same
+    exercise at the same position, the swap follows across the phase too."""
+    program = build_program("challenge-3", phases=2, weeks=2)
+    ProgramAccess.objects.create(user=user, program=program)
+    first = slot_at(program, phase=1, week=1)
+    later = slot_at(program, phase=2, week=2)
+    assert first.exercise_id == later.exercise_id
+
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{first.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+
+    body = client.get(f"/api/training/days/{later.day_id}/").json()["slots"][0]
+    assert body["substitution"]["replacement"]["name"] == "DB Lunge"
+
+
+def test_session_scoped_substitution_does_not_reach_the_next_week(
+    client, enabled_profile, multiweek_access
+):
+    """Widening the program scope must not widen the session one: a one-off
+    stays one-off, which is the promise of "solo esta sesión"."""
+    first = slot_at(multiweek_access, phase=1, week=1)
+    second = slot_at(multiweek_access, phase=1, week=2)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    created = client.post(
+        f"/api/training/slots/{first.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "session"},
+        format="json",
+    )
+    assert created.status_code == 201
+
+    body = client.get(f"/api/training/days/{second.day_id}/").json()["slots"][0]
+    assert body["substitution"] is None
+
+    session = WorkoutSession.objects.create(
+        user=enabled_profile.user, day=second.day, week_number=2,
+        performed_on=date(2026, 8, 10),
+    )
+    log = client.post(
+        f"/api/training/sessions/{session.pk}/logs/",
+        {"slot": second.pk, "set_number": 1, "reps": 10},
+        format="json",
+    ).json()
+    assert log["performed_exercise"] == second.exercise.name
+    assert log["was_substituted"] is False
+
+
+def test_reverting_a_substitution_restores_the_prescription_everywhere(
+    client, enabled_profile, multiweek_access
+):
+    first = slot_at(multiweek_access, phase=1, week=1)
+    second = slot_at(multiweek_access, phase=1, week=2)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{first.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+
+    # Undone from week 2, where the row does not even live: what you revert is
+    # what you were looking at.
+    assert client.delete(
+        f"/api/training/slots/{second.pk}/substitutions/"
+    ).status_code == 204
+    for slot in (first, second):
+        body = client.get(f"/api/training/days/{slot.day_id}/").json()["slots"][0]
+        assert body["substitution"] is None
+    # Nothing left in force.
+    assert client.delete(
+        f"/api/training/slots/{first.pk}/substitutions/"
+    ).status_code == 404
+
+
+def test_reverting_a_session_swap_uncovers_the_program_one(
+    client, enabled_profile, multiweek_access
+):
+    """Both scopes can be in force at once. Undoing the one-off must leave the
+    standing swap standing, not wipe both."""
+    slot = slot_at(multiweek_access, phase=1, week=1)
+    standing = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    one_off = Exercise.objects.create(
+        slug="leg-press", name="Leg Press", primary_muscle="quads", setting="gym"
+    )
+    client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": standing.pk, "scope": "program"},
+        format="json",
+    )
+    created = client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": one_off.pk, "scope": "session"},
+        format="json",
+    )
+    session_id = created.json()["session"]
+
+    url = f"/api/training/slots/{slot.pk}/substitutions/"
+    assert client.get(f"{url}?session={session_id}").json()["active"]["replacement"][
+        "name"
+    ] == "Leg Press"
+    assert client.delete(f"{url}?session={session_id}").status_code == 204
+    assert client.get(f"{url}?session={session_id}").json()["active"]["replacement"][
+        "name"
+    ] == "DB Lunge"
+
+
+def test_another_user_cannot_revert_a_substitution(
+    client, other_client, enabled_profile, multiweek_access
+):
+    slot = slot_at(multiweek_access, phase=1, week=1)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    client.post(
+        f"/api/training/slots/{slot.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "program"},
+        format="json",
+    )
+
+    # No access to the program at all, so the slot itself is invisible.
+    assert other_client.delete(
+        f"/api/training/slots/{slot.pk}/substitutions/"
+    ).status_code in (403, 404)
+    assert (
+        client.get(f"/api/training/days/{slot.day_id}/").json()["slots"][0][
+            "substitution"
+        ]
+        is not None
+    )
+
+
+def test_last_performed_exercise_reports_what_you_actually_did_here(
+    client, user, enabled_profile, multiweek_access
+):
+    """The hint for the swap you never recorded: a one-off you then repeated.
+    It reads the position, so last week's log reaches this week's card."""
+    first = slot_at(multiweek_access, phase=1, week=1)
+    second = slot_at(multiweek_access, phase=1, week=2)
+    replacement = Exercise.objects.create(
+        slug="db-lunge", name="DB Lunge", primary_muscle="quads", setting="home"
+    )
+    session = WorkoutSession.objects.create(
+        user=user, day=first.day, week_number=1, performed_on=date(2026, 8, 3)
+    )
+    client.post(
+        f"/api/training/slots/{first.pk}/substitutions/",
+        {"replacement": replacement.pk, "scope": "session", "session": session.pk},
+        format="json",
+    )
+    client.post(
+        f"/api/training/sessions/{session.pk}/logs/",
+        {"slot": first.pk, "set_number": 1, "reps": 10},
+        format="json",
+    )
+
+    body = client.get(f"/api/training/days/{second.day_id}/").json()["slots"][0]
+    assert body["substitution"] is None  # the one-off correctly did not follow
+    assert body["last_performed_exercise"]["exercise"]["name"] == "DB Lunge"
+    assert body["last_performed_exercise"]["performed_on"] == "2026-08-03"
+
+
+def test_last_performed_exercise_is_silent_when_it_agrees_with_the_card(
+    client, user, enabled_profile, multiweek_access
+):
+    first = slot_at(multiweek_access, phase=1, week=1)
+    second = slot_at(multiweek_access, phase=1, week=2)
+    session = WorkoutSession.objects.create(
+        user=user, day=first.day, week_number=1, performed_on=date(2026, 8, 3)
+    )
+    client.post(
+        f"/api/training/sessions/{session.pk}/logs/",
+        {"slot": first.pk, "set_number": 1, "reps": 10},
+        format="json",
+    )
+
+    body = client.get(f"/api/training/days/{second.day_id}/").json()["slots"][0]
+    assert body["last_performed_exercise"] is None
 
 
 def test_day_detail_carries_the_substitution_and_the_substitutes_history(

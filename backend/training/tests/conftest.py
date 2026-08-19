@@ -49,12 +49,24 @@ def other_client(other_user) -> APIClient:
     return api_client
 
 
-def build_program(slug: str, phases: int = 1, weeks: int = 1, days: int = 1) -> Program:
+def build_program(
+    slug: str,
+    phases: int = 1,
+    weeks: int = 1,
+    days: int = 1,
+    exercise_per_phase: bool = False,
+) -> Program:
     """A minimal but complete tree: program → variant → phase → week → day →
     slot → set. Tests never read the (gitignored) source JSON.
 
     Defaults stay at one of everything; the scheduling tests ask for a real
     multi-phase plan, which is what makes plan weeks span phases.
+
+    `exercise_per_phase` reproduces what the real programs do: the weeks of a
+    phase repeat the same exercise at a position, and the next phase puts a
+    different one there. Substitution tests need that asymmetry — it is the
+    whole reason a swap is matched on the exercise and not on the position
+    alone.
     """
     program = Program.objects.create(slug=slug, name=slug.title())
     variant = ProgramVariant.objects.create(
@@ -67,6 +79,13 @@ def build_program(slug: str, phases: int = 1, weeks: int = 1, days: int = 1) -> 
         setting="home",
     )
     for phase_number in range(1, phases + 1):
+        if exercise_per_phase and phase_number > 1:
+            exercise = Exercise.objects.create(
+                slug=f"{slug}-squat-p{phase_number}",
+                name=f"{slug} squat p{phase_number}",
+                primary_muscle="quads",
+                setting="home",
+            )
         phase = Phase.objects.create(
             variant=variant,
             number=phase_number,
@@ -90,9 +109,39 @@ def build_program(slug: str, phases: int = 1, weeks: int = 1, days: int = 1) -> 
     return program
 
 
+def slot_at(program: Program, phase: int = 1, week: int = 1, day: int = 1, order: int = 1):
+    """The one slot at a position. Spelling the phase and week out matters once
+    a fixture has more than one week: slots are per-week rows."""
+    return ExerciseSlot.objects.get(
+        day__week__phase__variant__program=program,
+        day__week__phase__number=phase,
+        day__week__number=week,
+        day__order=day,
+        order=order,
+    )
+
+
 @pytest.fixture
 def glute_coach() -> Program:
     return build_program("glute-coach")
+
+
+@pytest.fixture
+def multiweek_program() -> Program:
+    """2 phases × 3 weeks × 1 day, phase 2 prescribing a different exercise.
+
+    The shape a substitution actually meets in the real programs, and the one
+    the single-week fixtures could never expose.
+    """
+    return build_program(
+        "male-method-2", phases=2, weeks=3, exercise_per_phase=True
+    )
+
+
+@pytest.fixture
+def multiweek_access(user, enabled_profile, multiweek_program) -> Program:
+    ProgramAccess.objects.create(user=user, program=multiweek_program)
+    return multiweek_program
 
 
 @pytest.fixture

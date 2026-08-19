@@ -76,13 +76,19 @@ function OptionButton({
 export function SubstitutionDialog({
   slot,
   sessionId,
+  preselect,
   onClose,
   onSubstituted,
+  onReverted,
 }: {
   slot: ExerciseSlot | null
   sessionId: number | null
+  /** Exercise id to open with already picked — the "la última vez hiciste X"
+   *  hint hands the choice over rather than making it silently. */
+  preselect?: number | null
   onClose: () => void
   onSubstituted: (slotId: number, substitution: Substitution) => void
+  onReverted: (slotId: number) => void
 }) {
   const { t } = useTranslation()
   const [options, setOptions] = useState<SubstitutionOptions | null>(null)
@@ -95,8 +101,10 @@ export function SubstitutionDialog({
   useEffect(() => {
     if (!slot) return
     setOptions(null)
-    setSelectedId(null)
-    setScope('session')
+    setSelectedId(preselect ?? null)
+    // Coming from the hint, the point is to stop repeating the swap by hand:
+    // "todo el programa" is the answer that makes it stick.
+    setScope(preselect ? 'program' : 'session')
     setGymOpen(false)
     setError(null)
     // The session decides whether a session-scoped swap counts as active.
@@ -105,7 +113,7 @@ export function SubstitutionDialog({
     api.training.substitutions(slot.id, sessionId).then(setOptions, (e: Error) =>
       setError(e.message),
     )
-  }, [slot, sessionId])
+  }, [slot, sessionId, preselect])
 
   const confirm = () => {
     if (!slot || selectedId === null) return
@@ -128,6 +136,23 @@ export function SubstitutionDialog({
           setError(e.message)
         },
       )
+  }
+
+  const revert = () => {
+    if (!slot) return
+    setSaving(true)
+    setError(null)
+    api.training.unsubstitute(slot.id, sessionId).then(
+      () => {
+        setSaving(false)
+        onReverted(slot.id)
+        onClose()
+      },
+      (e: Error) => {
+        setSaving(false)
+        setError(e.message)
+      },
+    )
   }
 
   return (
@@ -219,7 +244,16 @@ export function SubstitutionDialog({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          {/* Only offered when there is something to undo. Which swap it undoes
+              is decided by the server, so it always matches the card. */}
+          {slot?.substitution ? (
+            <Button variant="ghost" onClick={revert} disabled={saving}>
+              {t('training.revertSubstitution')}
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button onClick={confirm} disabled={selectedId === null || saving}>
             {t('training.substitute')}
           </Button>

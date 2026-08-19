@@ -89,30 +89,130 @@ def substitution_candidates(slot):
     return grouped
 
 
-def active_substitutions(user, slots, session=None):
+def sibling_slot_map(slots):
+    """Slot id → the ids of every slot the program treats as the same position.
+
+    A slot is per-WEEK: the loader repeats the phase's day list verbatim inside
+    the week loop, so week 1 and week 2 of a phase hold different rows for the
+    same exercise. Anything that must survive the week rollover — a
+    program-scoped substitution, "what did I do here last time" — needs this
+    map rather than a slot id.
+
+    The key is (variant, day.order, slot.order, exercise). Position alone would
+    be wrong: a later phase reuses day 1 / slot 1 for a completely different
+    lift, and neither a swap nor a history lookup may follow it there. Within a
+    phase the exercise at a position is identical across every week, so the
+    exercise never costs a match that should have happened.
+
+    Two queries for the whole day, whatever the caller prefetched; the exact
+    tuple match happens here in Python because the ORM cannot express "any of
+    these four-tuples".
+    """
+    slot_ids = [slot.pk for slot in slots]
+    if not slot_ids:
+        return {}
+    # Read the key off the database rather than off `slot.day.week.phase`,
+    # which would be three queries per slot for callers that only prefetched
+    # the day's own slots.
+    keys = {
+        pk: (variant_id, day_order, order, exercise_id)
+        for pk, variant_id, day_order, order, exercise_id in ExerciseSlot.objects
+        .filter(pk__in=slot_ids)
+        .values_list(
+            "pk",
+            "day__week__phase__variant_id",
+            "day__order",
+            "order",
+            "exercise_id",
+        )
+    }
+
+    variant_ids, day_orders, slot_orders, exercise_ids = (
+        {key[i] for key in keys.values()} for i in range(4)
+    )
+    # The __in filters only narrow the scan; the tuple equality below is what
+    # decides, so a cross-product hit here is harmless.
+    matches = {}
+    rows = ExerciseSlot.objects.filter(
+        day__week__phase__variant_id__in=variant_ids,
+        day__order__in=day_orders,
+        order__in=slot_orders,
+        exercise_id__in=exercise_ids,
+    ).values_list(
+        "pk",
+        "day__week__phase__variant_id",
+        "day__order",
+        "order",
+        "exercise_id",
+    )
+    for pk, variant_id, day_order, order, exercise_id in rows:
+        matches.setdefault((variant_id, day_order, order, exercise_id), []).append(pk)
+    return {slot_pk: matches.get(key, [slot_pk]) for slot_pk, key in keys.items()}
+
+
+def active_substitutions(user, slots, session=None, siblings=None):
     """Slot id → the substitution in force, honouring its scope.
 
     The single place a substitution is resolved: the day view, the picker and
     the log endpoint all read it, so what the card shows is by construction
     what gets written to `SetLog.performed_exercise`.
 
-    A program-scoped swap applies to every session of that slot; a
-    session-scoped one only inside the session it was made in, so a one-off
-    stays one-off. Ascending order means the most recent lands in the dict
+    A program-scoped swap applies to every session of every week that
+    prescribes the same exercise at the same position — see `sibling_slot_map`,
+    without which it would only ever apply to the single week it was made in. A
+    session-scoped one applies only inside the session it was made in, so a
+    one-off stays one-off, and it is resolved last so it wins over a standing
+    swap on the same slot.
+
+    Within each pass, ascending order means the most recent lands in the dict
     last and wins.
+
+    `siblings` lets a caller that needs the map anyway — the day view builds it
+    for the last-performed hint too — pass it in rather than pay for it twice.
     """
-    condition = models.Q(scope=SubstitutionScope.PROGRAM)
-    if session is not None:
-        condition |= models.Q(scope=SubstitutionScope.SESSION, session=session)
-    return {
-        substitution.slot_id: substitution
-        for substitution in ExerciseSubstitution.objects.filter(
-            user=user, slot__in=slots
-        )
-        .filter(condition)
-        .select_related("replacement")
-        .order_by("created_at")
+    if siblings is None:
+        siblings = sibling_slot_map(slots)
+    slot_for_sibling = {
+        sibling_pk: slot_pk
+        for slot_pk, sibling_pks in siblings.items()
+        for sibling_pk in sibling_pks
     }
+
+    resolved = {}
+    program_scoped = (
+        ExerciseSubstitution.objects.filter(
+            user=user,
+            scope=SubstitutionScope.PROGRAM,
+            slot_id__in=slot_for_sibling,
+        )
+        .select_related("replacement", "original_exercise")
+        .prefetch_related(
+            "replacement__equipment_required",
+            "original_exercise__equipment_required",
+        )
+        .order_by("created_at")
+    )
+    for substitution in program_scoped:
+        resolved[slot_for_sibling[substitution.slot_id]] = substitution
+
+    if session is not None:
+        session_scoped = (
+            ExerciseSubstitution.objects.filter(
+                user=user,
+                scope=SubstitutionScope.SESSION,
+                session=session,
+                slot__in=slots,
+            )
+            .select_related("replacement", "original_exercise")
+            .prefetch_related(
+                "replacement__equipment_required",
+                "original_exercise__equipment_required",
+            )
+            .order_by("created_at")
+        )
+        for substitution in session_scoped:
+            resolved[substitution.slot_id] = substitution
+    return resolved
 
 
 def performed_exercises(slots, substitutions):
@@ -393,4 +493,48 @@ def last_performances(user, exercises, exclude_session=None):
     return {
         exercise.pk: last_performance(user, exercise, exclude_session)
         for exercise in exercises
+    }
+
+
+def last_performed_exercises(user, slots, exclude_session=None, siblings=None):
+    """Slot id → the exercise last logged at that position, and when.
+
+    Answers "what did I actually do here?", which is not what
+    `last_performances` answers ("when did I last do exercise X"). Its use is
+    the hint on a card whose prescription you have quietly been ignoring: you
+    swapped for one session months ago and have repeated the substitute ever
+    since without ever recording a program-scoped swap.
+
+    Position, not slot id — see `sibling_slot_map`; last week's log lives on a
+    different slot row. A set reaches its slot through its prescription, which
+    is exactly the set of logs that have a position at all.
+    """
+    if siblings is None:
+        siblings = sibling_slot_map(slots)
+    slot_for_sibling = {
+        sibling_pk: slot_pk
+        for slot_pk, sibling_pks in siblings.items()
+        for sibling_pk in sibling_pks
+    }
+    logs = (
+        SetLog.objects.filter(
+            session__user=user, prescription__slot_id__in=slot_for_sibling
+        )
+        .select_related("performed_exercise", "session", "prescription")
+        .order_by(
+            models.F("session__performed_on").asc(nulls_first=True),
+            "session_id",
+            "id",
+        )
+    )
+    if exclude_session is not None:
+        logs = logs.exclude(session=exclude_session)
+    # Ascending, so the newest overwrites: same trick as active_substitutions,
+    # and it keeps the ordering rule in one shape across the module.
+    return {
+        slot_for_sibling[log.prescription.slot_id]: (
+            log.performed_exercise,
+            log.session.performed_on,
+        )
+        for log in logs
     }

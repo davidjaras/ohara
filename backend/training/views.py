@@ -1,3 +1,4 @@
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -204,14 +205,22 @@ class DayDetailView(TrainingView):
             scheduled_on = services.scheduled_date(run.started_on, plan_week, day)
 
         slots = list(day.slots.all())
+        # Both lookups below reach across weeks through the same map, so it is
+        # built once here rather than twice inside them.
+        siblings = services.sibling_slot_map(slots)
         # What the card is titled by, and what a logged set will record, are
         # the same lookup — resolved once for the whole day.
-        substitutions = services.active_substitutions(request.user, slots, session)
+        substitutions = services.active_substitutions(
+            request.user, slots, session, siblings=siblings
+        )
         performed = services.performed_exercises(slots, substitutions)
         performances = services.last_performances(
             request.user,
             set(performed.values()),
             exclude_session=session,
+        )
+        last_performed = services.last_performed_exercises(
+            request.user, slots, exclude_session=session, siblings=siblings
         )
         return Response(
             WorkoutDayDetailSerializer(
@@ -224,6 +233,7 @@ class DayDetailView(TrainingView):
                     "substitutions": substitutions,
                     "performed_exercises": performed,
                     "last_performances": performances,
+                    "last_performed_exercises": last_performed,
                 },
             ).data
         )
@@ -306,6 +316,10 @@ class SlotSubstitutionsView(TrainingView):
             user=request.user,
             slot=slot,
             replacement=get_object_or_404(Exercise, pk=data["replacement"]),
+            # The prescription, not what an earlier swap put in its place: a
+            # program-scoped row follows the position only while the program
+            # still prescribes this exercise there.
+            original_exercise=slot.exercise,
             scope=data["scope"],
             session=session,
             reason=data.get("reason", ""),
@@ -313,6 +327,28 @@ class SlotSubstitutionsView(TrainingView):
         return Response(
             SubstitutionSerializer(substitution).data, status=status.HTTP_201_CREATED
         )
+
+    def delete(self, request, pk):
+        """Back to the prescription.
+
+        What gets deleted is whatever `active_substitutions` resolves for this
+        slot, so you always undo the swap you were looking at. Removing a
+        session-scoped row therefore uncovers the program-scoped one beneath
+        it, which is the right answer: the one-off ends, the standing swap
+        stays.
+        """
+        slot = get_object_or_404(services.accessible_slots(request.user), pk=pk)
+        session = None
+        session_id = request.query_params.get("session")
+        if session_id:
+            session = services.own_sessions(request.user).filter(pk=session_id).first()
+        substitution = services.active_substitutions(
+            request.user, [slot], session
+        ).get(slot.pk)
+        if substitution is None:
+            raise Http404("No substitution in force for this slot.")
+        substitution.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class SessionListView(TrainingView):
