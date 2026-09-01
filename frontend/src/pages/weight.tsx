@@ -29,6 +29,9 @@ const RANGE_DAYS: Record<Exclude<WeightRange, 'all'>, number> = {
   '1y': 365,
 }
 
+/** Rows shown before the list asks to be continued. */
+const MEASUREMENT_PAGE_SIZE = 20
+
 function WeightChart({ data, range }: { data: Measurement[]; range: WeightRange }) {
   const { t } = useTranslation()
 
@@ -165,9 +168,15 @@ export function WeightPage() {
   const [rows, setRows] = useState<Measurement[]>([])
   const [range, setRange] = useState<WeightRange>('3m')
   const [error, setError] = useState<string | null>(null)
+  // The list pages, the fetch does not: the trend chart above needs every
+  // point, so the rows are already here and only the rendering is bounded.
+  const [visible, setVisible] = useState(MEASUREMENT_PAGE_SIZE)
 
   const load = useCallback(() => {
-    api.measurements.list(METRIC_PESO).then(setRows, (e: Error) => setError(e.message))
+    api.measurements.list(METRIC_PESO).then((next) => {
+      setRows(next)
+      setVisible(MEASUREMENT_PAGE_SIZE)
+    }, (e: Error) => setError(e.message))
   }, [])
 
   useEffect(load, [load])
@@ -179,13 +188,12 @@ export function WeightPage() {
 
   return (
     <div className="page-stack gap-10 sm:gap-12">
-      <Section title={t('weight.formTitle')} description={t('weight.formDescription')}>
+      <Section title={t('weight.formTitle')}>
         <WeightForm onSaved={load} />
       </Section>
 
       <Section
         title={t('weight.chartTitle')}
-        description={t('weight.chartDescription')}
         action={
           <RangeSelect
             options={[
@@ -202,13 +210,13 @@ export function WeightPage() {
         <WeightChart data={rows} range={range} />
       </Section>
 
-      <Section title={t('weight.listTitle')} description={t('weight.listDescription')}>
+      <Section title={t('weight.listTitle')}>
         {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
         {rows.length === 0 ? (
           <EmptyState>{t('weight.empty')}</EmptyState>
         ) : (
           <ul className="divide-y divide-hairline">
-            {rows.map((row) => (
+            {rows.slice(0, visible).map((row) => (
               <li key={row.id} className="flex items-center gap-3 py-3">
                 <IconTile tone="muted">
                   <Scale className="size-4" />
@@ -231,6 +239,15 @@ export function WeightPage() {
               </li>
             ))}
           </ul>
+        )}
+        {visible < rows.length && (
+          <Button
+            variant="outline"
+            className="mt-3 w-full"
+            onClick={() => setVisible((n) => n + MEASUREMENT_PAGE_SIZE)}
+          >
+            {t('common.loadMore')}
+          </Button>
         )}
       </Section>
     </div>

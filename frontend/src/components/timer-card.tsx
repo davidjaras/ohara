@@ -237,9 +237,6 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
 
   return (
     <Panel variant="hero" className="p-4">
-      <p className="mb-3 text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
-        {t('timer.heroLabel')}
-      </p>
       <div>
         {timer === null ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t('timer.loading')}</p>
@@ -252,14 +249,10 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
                 ) : (
                   clock(previewSeconds)
                 )}
-                <p className="text-sm text-muted-foreground">{t('timer.ready')}</p>
               </TimerRing>
             </div>
             <RangeSelect<DurationChoice>
               size="chips"
-              // Bleeds to the panel edges so a chip that scrolls out of view
-              // reads as scrollable rather than clipped.
-              className="-mx-4 px-4"
               options={[
                 ...PLANNED_PRESET_MINUTES.map((minutes) => ({
                   value: minutes as DurationChoice,
@@ -288,9 +281,6 @@ export function TimerCard({ metric, onSessionSaved }: TimerCardProps) {
               <Play />
               {t('timer.start')}
             </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              {t('timer.keepsRunning')}
-            </p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">

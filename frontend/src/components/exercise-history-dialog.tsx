@@ -5,7 +5,6 @@ import { formatShortDate } from '@/lib/format'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -49,10 +48,9 @@ export function ExerciseHistoryDialog({
 
   return (
     <Dialog open={exercise !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{exercise?.name}</DialogTitle>
-          <DialogDescription>{t('training.historyDescription')}</DialogDescription>
         </DialogHeader>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

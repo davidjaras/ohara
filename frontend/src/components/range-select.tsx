@@ -12,8 +12,8 @@ interface RangeSelectProps<T extends string | number> {
   /**
    * `compact` is the segmented control that rides along a section label
    * (chart ranges). `chips` is the row of standalone pills used where the
-   * choice is the point of the block, like the timer presets — it scrolls
-   * instead of wrapping so the row height never changes.
+   * choice is the point of the block, like the timer presets — centred under
+   * the ring it belongs to, and few enough that it never needs to scroll.
    */
   size?: 'compact' | 'chips'
   className?: string
@@ -32,7 +32,7 @@ export function RangeSelect<T extends string | number>({
     <div
       className={cn(
         chips
-          ? 'flex gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+          ? 'flex flex-wrap justify-center gap-2 py-0.5'
           : 'glass-subtle flex shrink-0 gap-0.5 rounded-full p-0.5',
         className,
       )}

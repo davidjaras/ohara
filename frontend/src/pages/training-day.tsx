@@ -5,7 +5,6 @@ import { ArrowLeftRight, Check, History, Info, Timer } from 'lucide-react'
 import {
   api,
   type ExerciseSlot,
-  type Performance,
   type SetLog,
   type SetPrescription,
   type Substitution,
@@ -13,7 +12,7 @@ import {
   type WorkoutDayDetail,
   type WorkoutSession,
 } from '@/lib/api'
-import { formatShortDate, formatWeekdayDate, todayISO } from '@/lib/format'
+import { formatWeekdayDate, todayISO } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/empty-state'
@@ -86,24 +85,13 @@ function hydrateSubstitutions(detail: WorkoutDayDetail): Record<number, Substitu
   return map
 }
 
-/** "40 × 10 · 40 × 10 · 35 × 8" — a past session at a glance. */
-function formatSets(performance: Performance): string {
-  return performance.sets
-    .map((set) => {
-      const weight = set.weight === null ? null : trimWeight(set.weight)
-      const reps = set.reps === null ? '—' : String(set.reps)
-      return weight === null ? reps : `${weight}×${reps}`
-    })
-    .join(' · ')
-}
-
 /** "40.00" reads as 40, "17.50" as 17.5 — trailing zeros are noise on a phone. */
 function trimWeight(weight: string): string {
   const value = Number(weight)
   return Number.isFinite(value) ? String(value) : weight
 }
 
-type DayStatus = 'today' | 'late' | 'ahead' | 'offPlan'
+type DayStatus = 'late' | 'ahead' | 'offPlan'
 
 /**
  * Where this workout sits relative to the plan. A day outside the active plan
@@ -113,7 +101,9 @@ function dayStatus(day: WorkoutDayDetail): DayStatus | null {
   if (!day.in_active_plan) return 'offPlan'
   if (!day.scheduled_on) return null
   const today = todayISO()
-  if (day.scheduled_on === today) return 'today'
+  // On schedule is the null case: the header already prints the date, and the
+  // pill exists to flag a deviation from the plan, not to confirm one.
+  if (day.scheduled_on === today) return null
   return day.scheduled_on < today ? 'late' : 'ahead'
 }
 
@@ -267,33 +257,6 @@ function SetRow({
   )
 }
 
-/** "Última vez · 12 jul: 40×10 · 40×10 · 35×8", tappable into the full history. */
-function LastPerformance({
-  performance,
-  onOpen,
-}: {
-  performance: Performance
-  onOpen: () => void
-}) {
-  const { t } = useTranslation()
-  const when = performance.performed_on
-    ? formatShortDate(performance.performed_on)
-    : t('training.historyUndated')
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="mt-1 flex w-full items-center gap-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <History className="size-3 shrink-0" />
-      <span className="truncate">
-        {t('training.lastTime', { when, sets: formatSets(performance) })}
-      </span>
-    </button>
-  )
-}
-
 function SlotBlock({
   slot,
   substitution,
@@ -335,15 +298,27 @@ function SlotBlock({
           <p className="text-sm font-semibold">
             {label && <span className="mr-2 text-primary">{label}</span>}
             {performed.name}
+            {/* State, not action: the arrow in the cluster is what swaps. A
+                sentence naming the exercise you are not doing cost a line on
+                every substituted card; the name it replaced now rides the
+                revert button in the substitution dialog, which had to be
+                labelled anyway. The swap's own snapshot, not this week's slot:
+                a program-scoped swap is resolved from another week's row, and
+                the two agree only because the match requires it. */}
+            {substitution && (
+              <span
+                title={t('training.insteadOf', {
+                  name: substitution.original_exercise.name,
+                })}
+                aria-label={t('training.insteadOf', {
+                  name: substitution.original_exercise.name,
+                })}
+                className="ml-1.5 inline-flex align-middle text-muted-foreground"
+              >
+                <ArrowLeftRight className="size-3.5" />
+              </span>
+            )}
           </p>
-          {substitution && (
-            <p className="text-xs text-muted-foreground">
-              {/* The swap's own snapshot, not this week's slot: a program-scoped
-                  swap is resolved from another week's row, and the two agree
-                  only because the match requires it. */}
-              {t('training.insteadOf', { name: substitution.original_exercise.name })}
-            </p>
-          )}
           {/* You have been doing something else here and never said so. Offer
               it; do not retitle the card behind the user's back. */}
           {!substitution && slot.last_performed_exercise && (
@@ -365,42 +340,38 @@ function SlotBlock({
                 .join(' · ')}
             </p>
           )}
-          {slot.modifiers.length > 0 && (
-            <p className="mt-1 flex flex-wrap gap-1">
-              {slot.modifiers.map((modifier, i) => (
-                <Pill key={i}>{modifier.type.replaceAll('_', ' ')}</Pill>
-              ))}
-            </p>
-          )}
-          {last ? (
-            <LastPerformance
-              performance={last}
-              onOpen={() => onOpenHistory(performed)}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => onOpenHistory(performed)}
-              className="mt-1 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <History className="size-3 shrink-0" />
-              {t('training.lastTimeNever')}
-            </button>
-          )}
+          {/* The modifier enum said the same thing as the annotation in worse,
+              untranslated English: every one of the 94 slots that carries a
+              modifier also carries the annotation it was derived from, and the
+              annotation is richer every time — "PAUSE AT BOTTOM" over "paused
+              reps", the whole "Use Smith Machine if Available" over a pill
+              reading "equipment alternative". */}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {slot.sets[0]?.rest_seconds != null && slot.sets[0].rest_seconds > 0 && (
             <Button
               variant="ghost"
-              size="sm"
-              className="px-2 text-muted-foreground"
+              size="icon"
+              className="size-8 text-muted-foreground"
               onClick={onOpenRest}
               aria-label={t('training.restOpen')}
             >
+              {/* No number: every row prints its own rest in the Desc column,
+                  one line below. */}
               <Timer className="size-4" />
-              {slot.sets[0].rest_seconds}
             </Button>
           )}
+          {/* Last time's loads are already the weight placeholders; the rest of
+              the log is one tap away instead of a caption under every title. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground"
+            onClick={() => onOpenHistory(performed)}
+            aria-label={t('training.historyOpen')}
+          >
+            <History className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -692,11 +663,7 @@ export function TrainingDayPage() {
           completedAt ? (
             <Pill tone="accent">{t('training.dayCompleted')}</Pill>
           ) : (
-            status && (
-              <Pill tone={status === 'today' ? 'accent' : 'muted'}>
-                {t(`training.status_${status}`)}
-              </Pill>
-            )
+            status && <Pill>{t(`training.status_${status}`)}</Pill>
           )
         }
       />
@@ -707,21 +674,16 @@ export function TrainingDayPage() {
         group.label !== null ? (
           // Supersets are the one grouping on this screen that must read as a
           // unit, so they keep a panel and an accent edge while standalone
-          // exercises are plain hairline-separated blocks.
+          // exercises are plain hairline-separated blocks. The frame is the
+          // whole message: a heading naming the series and a sentence saying
+          // the members alternate only repeated what the members' own F1/F2
+          // labels already show.
           <Panel
             variant="subtle"
             key={`series-${group.slots[0].id}`}
             className="border-l-2 border-l-primary p-4"
           >
-            <p className="text-sm font-semibold">
-              {t('training.superset', { label: group.label })}
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {t('training.supersetHint', {
-                sequence: group.slots.map(memberLabel).join(' → '),
-              })}
-            </p>
-            <div className="mt-4 grid gap-4 divide-y divide-hairline [&>*:not(:first-child)]:pt-4">
+            <div className="grid gap-4 divide-y divide-hairline [&>*:not(:first-child)]:pt-4">
               {group.slots.map((slot) => (
                 <SlotBlock
                   key={slot.id}

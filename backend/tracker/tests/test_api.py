@@ -350,3 +350,50 @@ class TestMetrics:
     def test_lists_registered_metrics(self, client):
         keys = [m["key"] for m in client.get("/api/metrics/").json()]
         assert "estudio" in keys
+
+
+class TestSessionListWindow:
+    """`limit`/`offset` paging. The response stays a bare array: the client
+    knows it reached the end by getting back fewer rows than it asked for."""
+
+    def _seed(self, client, count):
+        today = timezone.localdate()
+        for i in range(count):
+            client.post(
+                "/api/sessions/",
+                {"date": str(today - timedelta(days=i)), "minutes": 10 + i, "note": f"s{i}"},
+                format="json",
+            )
+
+    def test_offset_pages_without_overlap_or_gap(self, client):
+        self._seed(client, 5)
+        first = client.get("/api/sessions/?limit=2&offset=0").json()
+        second = client.get("/api/sessions/?limit=2&offset=2").json()
+        last = client.get("/api/sessions/?limit=2&offset=4").json()
+
+        assert [len(first), len(second), len(last)] == [2, 2, 1]
+        ids = [row["id"] for row in first + second + last]
+        assert len(set(ids)) == 5
+        # Newest first, and paging does not disturb that order.
+        assert ids == [row["id"] for row in client.get("/api/sessions/?limit=50").json()]
+
+    def test_offset_past_the_end_is_empty_not_an_error(self, client):
+        self._seed(client, 2)
+        r = client.get("/api/sessions/?offset=99")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    @pytest.mark.parametrize("query", ["limit=abc", "offset=abc", "limit=-1", "offset=-3"])
+    def test_unparseable_window_is_400_not_500(self, client, query):
+        assert client.get(f"/api/sessions/?{query}").status_code == 400
+
+    def test_limit_is_capped(self, client, settings):
+        settings.MAX_LIST_LIMIT = 3
+        self._seed(client, 5)
+        assert len(client.get("/api/sessions/?limit=999").json()) == 3
+
+    def test_paging_stays_scoped_to_the_user(self, client, other_client):
+        self._seed(client, 3)
+        self._seed(other_client, 2)
+        assert len(client.get("/api/sessions/?limit=50").json()) == 3
+        assert len(other_client.get("/api/sessions/?limit=50&offset=1").json()) == 1

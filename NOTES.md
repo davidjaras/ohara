@@ -372,3 +372,83 @@ mantiene de acuerdo lo que ves y lo que se escribe al registrar una serie. Es
 un campo distinto de `last_performance`, que va indexado por ejercicio
 realizado y trae las series; este solo responde "aquí llevas tiempo haciendo
 otra cosa".
+
+## Menos etiquetas: la regla, y qué se quedó
+
+La app narraba lo que ya se veía. Cada `Section` tenía título **y** una frase
+debajo, y en la pantalla de entreno una tarjeta de ejercicio podía apilar seis
+líneas antes de la tabla de series. La regla que se aplicó, en orden:
+
+1. **Fuera** si repite el título, el control o el dato visible. «Idioma de la
+   interfaz.» bajo un título que dice «Idioma».
+2. **Fuera** si lo explica la maquetación. Una superserie enmarcada en su propio
+   panel no necesita una frase diciendo que los ejercicios se alternan.
+3. **Fuera** si etiqueta algo inconfundible. Un anillo con una cuenta atrás y un
+   botón «Iniciar sesión de estudio» debajo no necesita el rótulo «Cronómetro».
+4. **Se queda** si carga una regla, una unidad o una consecuencia que no está en
+   ningún otro sitio: la retroactividad de la meta, el cierre automático tras
+   dos avisos, los textos de confirmación destructiva.
+5. **Se fusiona** cuando una sección tenía descripción *y* un párrafo de ayuda
+   solapados: sobrevive el que enuncia la regla, no el que repite el título.
+
+Preferir borrar entera una frase antes que acortarla: «igual de presente pero
+más corta» es justamente el defecto que se estaba arreglando. 253 → 214 claves.
+
+**El build no valida las claves de i18n.** No hay `declare module 'i18next'` con
+`CustomTypeOptions`, así que `ParseKeys` es `string` y `t('clave.borrada')`
+compila y pinta la clave cruda en pantalla. La única red es `en: typeof es`
+(i18n.ts), que solo comprueba que los dos diccionarios coincidan entre sí, y
+`noUnusedLocals`, que salta por el código JSX huérfano pero jamás por una clave
+muerta. **Cada borrado exige un grep del sitio de render**, y hay tres familias
+que se buscan con plantilla y no con literal: ``t(`history.${invalid}`)``,
+``t(`training.status_${status}`)`` y las claves `nav.*`, que viven dentro del
+array `BASE_NAV_ITEMS` (layout.tsx) y se resuelven como `t(key)`.
+
+**`training.insteadOf` parece muerta y no lo está.** Ya no es un `<p>`: es el
+`title`/`aria-label` del icono de sustitución junto al nombre. Una auditoría de
+copy hecha a base de grep la marcará como huérfana; no lo es.
+
+**Los pills de modificadores se borraron, no se tradujeron.** Renderizaban el
+enum del backend crudo (`paused_reps` → «paused reps») en una UI en español.
+Medido con `jq` sobre los cinco programas cargados: los 94 slots que llevan
+`modifiers` llevan **también** `coach_annotation`, ninguno se queda sin, y la
+anotación es más rica siempre — «PAUSE AT BOTTOM» frente a «paused reps», y el
+texto entero de «Use Smith Machine if Available» frente a un pill que solo decía
+«equipment alternative». El pill no añadía nada; tapaba.
+
+**La superserie no dice ninguna palabra.** El panel con el borde de acento ya
+significa «esto es una unidad» (ver *Liquid glass*), el `F1`/`F2` en acento sobre
+cada miembro es la secuencia que deletreaba la frase, y la alternancia la
+anuncia el temporizador de descanso en el único momento en que importa
+(«Cambio a F2 · …»).
+
+**La última vez pasó a botón, y el nombre original se mudó.** La leyenda
+«Última vez · 25 ago: 21×9 · …» desapareció: los pesos de la sesión anterior ya
+son el *placeholder* de cada input de peso, y el resto está a un toque en el
+diálogo de historial, que ya existía. Como la sustitución ahora se marca con un
+icono —`title` no existe en un móvil—, el botón de deshacer del diálogo pasó a
+llamarse «Volver a {nombre}»: tras un cambio con scope de programa,
+`original_exercise` es el único sitio donde ese nombre existe.
+
+**«Meta semanal: X» se cayó por incorrecta, no solo por redundante.** La
+cabecera de *Semanas cumplidas* mostraba la meta **vigente** mientras cada fila
+muestra la que tenía esa semana; en cuanto cambiabas la meta, la cabecera
+contradecía a las filas.
+
+## Paginar sin envolver la respuesta
+
+`limit`/`offset` sobre la misma lista pelada de siempre. No se metió el
+paginador de DRF: ambas vistas son `APIView` con efectos (`finalize_expired_timer`
+en cada GET) y el envoltorio `{count, next, results}` habría reescrito cinco
+aserciones de test para no ganar nada. **El cliente sabe que llegó al final
+porque recibe menos filas de las que pidió**, así que no hay un total que
+mantener sincronizado con una lista que cambia mientras la lees.
+
+`int(request.query_params[...])` estaba sin proteger: `?limit=abc` era un 500.
+`_window()` lo parsea, rechaza negativos con 400 y tapa el `limit` con
+`MAX_LIST_LIMIT`.
+
+**La lista de peso pagina en el cliente, no en el servidor**, y es a propósito:
+la gráfica de evolución necesita todos los puntos, así que las filas ya están
+en memoria y limitarlas en el fetch solo habría roto la gráfica. La de sesiones
+sí pagina contra el servidor: no tiene esa atadura y crece sin techo.

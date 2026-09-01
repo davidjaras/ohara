@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -93,10 +92,9 @@ export function StartPlanDialog({
 
   return (
     <Dialog open={program !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{t('training.startPlanTitle', { name: program?.name })}</DialogTitle>
-          <DialogDescription>{t('training.startPlanDescription')}</DialogDescription>
         </DialogHeader>
 
         {program && program.variants.length > 1 && (

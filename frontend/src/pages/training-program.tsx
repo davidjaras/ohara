@@ -59,10 +59,7 @@ export function TrainingProgramPage() {
       />
 
       {hasRoutines && (
-        <Section
-          title={t('training.routineTitle')}
-          description={t('training.routineDescription')}
-        >
+        <Section title={t('training.routineTitle')}>
           <div className="grid gap-2">
             {detail.variants.map((variant) => (
               <button

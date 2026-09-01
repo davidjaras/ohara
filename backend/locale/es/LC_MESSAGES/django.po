@@ -52,9 +52,6 @@ msgstr "¿Olvidaste tu contraseña?"
 msgid "Password changed"
 msgstr "Contraseña cambiada"
 
-#: templates/registration/password_change_done.html:6
-msgid "Your password was updated."
-msgstr "Tu contraseña quedó actualizada."
 
 #: templates/registration/password_change_done.html:7
 #: templates/registration/password_change_form.html:12
@@ -67,27 +64,18 @@ msgstr "Volver a la app"
 msgid "Change password"
 msgstr "Cambiar contraseña"
 
-#: templates/registration/password_change_form.html:6
-msgid "Enter your current password and the new one twice."
-msgstr "Ingresá tu contraseña actual y la nueva dos veces."
 
 #: templates/registration/password_reset_complete.html:3
 #: templates/registration/password_reset_complete.html:5
 msgid "Password reset"
 msgstr "Contraseña restablecida"
 
-#: templates/registration/password_reset_complete.html:6
-msgid "Your new password is set. You can sign in now."
-msgstr "Tu contraseña nueva quedó definida. Ya podés iniciar sesión."
 
 #: templates/registration/password_reset_confirm.html:3
 #: templates/registration/password_reset_confirm.html:6
 msgid "New password"
 msgstr "Contraseña nueva"
 
-#: templates/registration/password_reset_confirm.html:7
-msgid "Enter your new password twice."
-msgstr "Ingresá tu contraseña nueva dos veces."
 
 #: templates/registration/password_reset_confirm.html:11
 msgid "Set password"
@@ -113,10 +101,10 @@ msgstr "Email enviado"
 #: templates/registration/password_reset_done.html:6
 msgid ""
 "If that email exists in the system, you will receive a link to reset your "
-"password. In development the email is printed to the server console."
+"password."
 msgstr ""
 "Si ese email existe en el sistema, vas a recibir un enlace para restablecer "
-"tu contraseña. En desarrollo el email se imprime en la consola del servidor."
+"tu contraseña."
 
 #: templates/registration/password_reset_done.html:7
 #: templates/registration/password_reset_form.html:12

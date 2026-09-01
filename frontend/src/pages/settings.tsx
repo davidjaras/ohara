@@ -58,7 +58,7 @@ function GoalSection() {
   }
 
   return (
-    <Section title={t('settings.goalTitle')} description={t('settings.goalDescription')}>
+    <Section title={t('settings.goalTitle')}>
       <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="grid gap-2">
           <Label htmlFor="goal-minutes">{t('settings.goalLabel')}</Label>
@@ -143,7 +143,7 @@ function ReminderSection() {
   }
 
   return (
-    <Section title={t('settings.reminderTitle')} description={t('settings.reminderDescription')}>
+    <Section title={t('settings.reminderTitle')}>
       <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <RangeSelect<ReminderChoice>
@@ -188,9 +188,8 @@ function LanguageSection() {
   const { t, i18n } = useTranslation()
 
   return (
-    <Section title={t('settings.languageTitle')} description={t('settings.languageDescription')}>
+    <Section title={t('settings.languageTitle')}>
       <div className="grid gap-2">
-        <Label>{t('settings.languageLabel')}</Label>
         <Select value={i18n.language} onValueChange={setLanguage}>
           <SelectTrigger className="w-full sm:w-56">
             <SelectValue />
@@ -241,7 +240,7 @@ function ThemeSection() {
   }
 
   return (
-    <Section title={t('settings.themeTitle')} description={t('settings.themeDescription')}>
+    <Section title={t('settings.themeTitle')}>
       <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="flex flex-wrap gap-2.5">
           {ACCENTS.map((accent) => {

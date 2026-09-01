@@ -85,10 +85,7 @@ export function TrainingPage() {
         </Section>
       )}
 
-      <Section
-        title={t('training.programsTitle')}
-        description={t('training.programsDescription')}
-      >
+      <Section title={t('training.programsTitle')}>
         {programs === null ? (
           <EmptyState>{t('training.loading')}</EmptyState>
         ) : programs.length === 0 ? (

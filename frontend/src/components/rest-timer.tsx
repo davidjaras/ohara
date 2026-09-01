@@ -61,11 +61,14 @@ export function RestTimer({
   }, [done, onDismiss])
 
   const isTransition = request.role === 'superset_transition'
+  // A plain between-sets rest gets no title: a full-width overlay you opened
+  // by tapping a clock, showing a Timer icon over a running countdown, does not
+  // need the word. Only a superset says something the countdown cannot.
   const title = isTransition
     ? t('training.restTimerTransition', { label: request.nextLabel ?? '' })
     : request.role === 'superset_round_end'
       ? t('training.restTimerRoundEnd')
-      : t('training.restTimerBetween')
+      : null
 
   return (
     // Sits just above the floating nav; both read the same offset so they can
@@ -87,9 +90,10 @@ export function RestTimer({
           )}
         </IconTile>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
-            {done ? t('training.restDone') : title}
-          </p>
+          {/* Kept on screen when the countdown hits zero: "Cambio a F2" is
+              needed most at exactly that moment, and the accent Check plus a
+              zeroed clock already say the rest is over. */}
+          {title && <p className="truncate text-sm font-medium">{title}</p>}
           <p className="font-mono text-lg tabular-nums text-primary">{remaining}</p>
         </div>
         {!running && (

@@ -160,7 +160,6 @@ export function TrainingPhasePage() {
             )}
           </>
         }
-        subtitle={detail.name}
         backTo={`/training/${detail.slug}`}
         backLabel={t('training.backToProgram')}
       />

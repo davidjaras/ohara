@@ -30,6 +30,32 @@ def _error(message: str, code: int) -> Response:
     return Response({"detail": message}, status=code)
 
 
+def _window(request, default_limit: int) -> tuple[int, int]:
+    """
+    The `limit`/`offset` slice a list view answers with. Both are parsed
+    defensively: they arrive from a query string, and `int("abc")` used to be
+    an unhandled 500. The limit is capped so one request can never ask for the
+    whole table, and the response stays a bare array — the client pages by
+    asking again with a bigger offset, and knows it reached the end when it
+    gets back fewer rows than it asked for.
+    """
+
+    def read(name: str, default: int) -> int:
+        raw = request.query_params.get(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(_("%(name)s must be a whole number.") % {"name": name})
+        if value < 0:
+            raise ValueError(_("%(name)s cannot be negative.") % {"name": name})
+        return value
+
+    limit = min(read("limit", default_limit), settings.MAX_LIST_LIMIT)
+    return limit, read("offset", 0)
+
+
 def _timer_state(timer: ActiveTimer | None) -> dict:
     if timer is None:
         return {"active": False}
@@ -178,7 +204,10 @@ class SessionListView(APIView):
     def get(self, request):
         metric = request.query_params.get("metric", settings.DEFAULT_SESSION_METRIC)
         services.finalize_expired_timer(request.user, metric, timezone.now())
-        limit = int(request.query_params.get("limit", settings.DEFAULT_SESSION_LIMIT))
+        try:
+            limit, offset = _window(request, settings.DEFAULT_SESSION_LIMIT)
+        except ValueError as e:
+            return _error(str(e), status.HTTP_400_BAD_REQUEST)
         rows = Session.objects.filter(user=request.user, metric=metric)
         if request.query_params.get("needs_review"):
             # Oldest first: the review banner resolves them one at a time.
@@ -187,7 +216,9 @@ class SessionListView(APIView):
                 .filter(reviewed_at__isnull=True)
                 .order_by("started_at")
             )
-        return Response(SessionSerializer(rows[:limit], many=True).data)
+        return Response(
+            SessionSerializer(rows[offset : offset + limit], many=True).data
+        )
 
     def post(self, request):
         serializer = ManualSessionInputSerializer(data=request.data)
@@ -260,8 +291,13 @@ class MeasurementListView(APIView):
         metric = request.query_params.get("metric")
         if not metric:
             return _error(_("Missing metric parameter."), status.HTTP_400_BAD_REQUEST)
-        limit = int(request.query_params.get("limit", settings.DEFAULT_MEASUREMENT_LIMIT))
-        rows = Measurement.objects.filter(user=request.user, metric=metric)[:limit]
+        try:
+            limit, offset = _window(request, settings.DEFAULT_MEASUREMENT_LIMIT)
+        except ValueError as e:
+            return _error(str(e), status.HTTP_400_BAD_REQUEST)
+        rows = Measurement.objects.filter(user=request.user, metric=metric)[
+            offset : offset + limit
+        ]
         return Response(MeasurementSerializer(rows, many=True).data)
 
     def post(self, request):

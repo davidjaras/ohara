@@ -8,7 +8,6 @@ import { TrainingProgramPage } from '@/pages/training-program'
 import { TrainingPhasePage } from '@/pages/training-phase'
 import { TrainingDayPage } from '@/pages/training-day'
 import { WeightPage } from '@/pages/weight'
-import { BrandPreview } from '@/pages/BrandPreview'
 
 /**
  * The day is the one legacy path that carried a query param. Its week no
@@ -23,7 +22,6 @@ function LegacyDayRedirect() {
 export default function App() {
   return (
     <Routes>
-      <Route path="brand-preview" element={<BrandPreview />} />
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
         <Route path="history" element={<HistoryPage />} />
