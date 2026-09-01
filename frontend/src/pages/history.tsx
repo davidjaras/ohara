@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,6 +27,10 @@ import { useLayoutContext } from '@/components/layout'
 // 12 weeks (a quarter) reads at a glance; 4 zooms into the current month and
 // 26/52 give the half-year and full-year picture.
 const WEEK_RANGES = [4, 12, 26, 52]
+
+// Enough to cover a normal month of study without a tap, short enough that the
+// list stops being a wall you scroll past to reach the rest of the page.
+const SESSION_PAGE_SIZE = 20
 
 type EntryDraft = { date: string; minutes: string; note: string }
 
@@ -89,7 +92,6 @@ function EntryFields({
           placeholder={t('timer.noteLabel')}
           rows={3}
         />
-        <p className="text-sm text-muted-foreground">{t('history.noteHint')}</p>
       </div>
     </>
   )
@@ -197,10 +199,9 @@ function EditEntryDialog({
 
   return (
     <Dialog open={session !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{t('history.editTitle')}</DialogTitle>
-          <DialogDescription>{t('history.editDescription')}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <EntryFields idPrefix="edit" draft={draft} onChange={setDraft} />
@@ -302,10 +303,34 @@ export function HistoryPage() {
   const [weeks, setWeeks] = useState(12)
   const [editing, setEditing] = useState<Session | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // A short page means the server has nothing left, so there is no total to
+  // keep in sync with a list that gains and loses rows while you read it.
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const load = useCallback(() => {
-    api.sessions.list(METRIC_ESTUDIO).then(setSessions, (e: Error) => setError(e.message))
+    api.sessions.list(METRIC_ESTUDIO, SESSION_PAGE_SIZE).then((rows) => {
+      setSessions(rows)
+      setHasMore(rows.length === SESSION_PAGE_SIZE)
+    }, (e: Error) => setError(e.message))
   }, [])
+
+  // Paging is by offset, so anything added or removed above the window shifts
+  // it. Every mutation on this page reloads from the first page instead.
+  const loadMore = useCallback(() => {
+    setLoadingMore(true)
+    api.sessions.list(METRIC_ESTUDIO, SESSION_PAGE_SIZE, sessions.length).then(
+      (rows) => {
+        setLoadingMore(false)
+        setSessions((current) => [...current, ...rows])
+        setHasMore(rows.length === SESSION_PAGE_SIZE)
+      },
+      (e: Error) => {
+        setLoadingMore(false)
+        setError(e.message)
+      },
+    )
+  }, [sessions.length])
 
   const loadStats = useCallback(() => {
     api.stats(METRIC_ESTUDIO, weeks).then(setStats, (e: Error) => setError(e.message))
@@ -345,13 +370,11 @@ export function HistoryPage() {
         )}
       </Section>
 
+      {/* No goal in the section header: every row prints its own week's goal,
+          and the header showed the CURRENT one — on a week where the goal
+          changed it contradicted the rows under it. */}
       {stats && stats.weekly.length > 0 && (
-        <Section
-          title={t('weekList.title')}
-          description={t('weekList.goal', {
-            goal: formatMinutes(stats.week_goal_minutes),
-          })}
-        >
+        <Section title={t('weekList.title')}>
           <WeekList
             weeks={stats.weekly.slice(-8)}
             currentWeekStart={stats.weekly[stats.weekly.length - 1].week_start}
@@ -359,18 +382,27 @@ export function HistoryPage() {
         </Section>
       )}
 
-      <Section title={t('history.manualTitle')} description={t('history.manualDescription')}>
+      <Section title={t('history.manualTitle')}>
         <ManualEntryForm onSaved={reload} />
       </Section>
 
-      <Section
-        title={t('history.sessionsTitle')}
-        description={t('history.sessionsDescription')}
-      >
+      <Section title={t('history.sessionsTitle')}>
         {error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : (
-          <SessionList sessions={sessions} onEdit={setEditing} onDeleted={reload} />
+          <>
+            <SessionList sessions={sessions} onEdit={setEditing} onDeleted={reload} />
+            {hasMore && (
+              <Button
+                variant="outline"
+                className="mt-3 w-full"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? t('common.loading') : t('common.loadMore')}
+              </Button>
+            )}
+          </>
         )}
       </Section>
 

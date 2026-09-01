@@ -8,10 +8,14 @@ export const MAX_DAY_MINUTES = 24 * 60
 /** Minutes a week has. */
 export const MAX_WEEK_MINUTES = 7 * MAX_DAY_MINUTES
 
-/** Planned-session presets (minutes) offered in the start block. */
-export const PLANNED_PRESET_MINUTES = [25, 50, 90]
+/**
+ * Planned-session presets (minutes) offered in the start block. One preset
+ * plus "other" and "no limit": a longer row of round numbers was three taps
+ * pretending to be a choice, and any other duration is one field away.
+ */
+export const PLANNED_PRESET_MINUTES = [25]
 /** First-run default until a last-used duration is remembered. */
-export const DEFAULT_PLANNED_MINUTES = 50
+export const DEFAULT_PLANNED_MINUTES = 25
 /** Minutes each extension adds when a planned session runs out. */
 export const EXTEND_MINUTES = 15
 

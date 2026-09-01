@@ -426,8 +426,15 @@ export const api = {
   },
 
   sessions: {
-    list: (metric: string, limit = 50) =>
-      request<Session[]>(`/api/sessions/?metric=${metric}&limit=${limit}`),
+    /**
+     * One page, newest first. The response is a bare array: a short page is
+     * how the caller knows it reached the end, so there is no total to keep
+     * in sync with a list that changes under it.
+     */
+    list: (metric: string, limit = 50, offset = 0) =>
+      request<Session[]>(
+        `/api/sessions/?metric=${metric}&limit=${limit}&offset=${offset}`,
+      ),
     pendingReview: (metric: string) =>
       request<Session[]>(`/api/sessions/?metric=${metric}&needs_review=1`),
     review: (id: number, data: { action: 'confirm' | 'adjust'; ended_at?: string; note?: string }) =>

@@ -13,12 +13,10 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -157,7 +155,7 @@ export function SubstitutionDialog({
 
   return (
     <Dialog open={slot !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85svh] overflow-y-auto">
+      <DialogContent className="max-h-[85svh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>
             {/* What you are replacing is what you are currently doing, which
@@ -168,7 +166,6 @@ export function SubstitutionDialog({
                 : '',
             })}
           </DialogTitle>
-          <DialogDescription>{t('training.substituteDescription')}</DialogDescription>
         </DialogHeader>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -227,12 +224,15 @@ export function SubstitutionDialog({
             )}
 
             <div className="grid gap-2">
-              <Label>{t('training.scopeLabel')}</Label>
               <Select
                 value={scope}
                 onValueChange={(v) => setScope(v as 'session' | 'program')}
               >
-                <SelectTrigger>
+                {/* The visible Label went: the only dropdown in the dialog,
+                    whose own value is a full phrase. The word survives as the
+                    accessible name, which the Label never provided — it wrapped
+                    nothing and carried no htmlFor. */}
+                <SelectTrigger aria-label={t('training.scopeLabel')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -249,7 +249,12 @@ export function SubstitutionDialog({
               is decided by the server, so it always matches the card. */}
           {slot?.substitution ? (
             <Button variant="ghost" onClick={revert} disabled={saving}>
-              {t('training.revertSubstitution')}
+              {/* Names what it reverts to. The card marks a swap with an icon
+                  now, so after a program-scoped swap this button is the only
+                  place the prescribed exercise is written down. */}
+              {t('training.revertSubstitution', {
+                name: slot.substitution.original_exercise.name,
+              })}
             </Button>
           ) : (
             <span />

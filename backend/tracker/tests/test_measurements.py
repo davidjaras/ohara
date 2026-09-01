@@ -86,3 +86,30 @@ class TestMeasurementApi:
         client.post("/api/sessions/", {"date": "2026-07-06", "minutes": 90}, format="json")
         stats = client.get("/api/stats/").json()
         assert stats["total_minutes"] == 90
+
+
+class TestMeasurementListWindow:
+    def _seed(self, client, count):
+        for i in range(count):
+            client.post(
+                "/api/measurements/",
+                {"metric": "peso", "date": f"2026-07-{i + 1:02d}", "value": "80.0", "note": ""},
+                format="json",
+            )
+
+    def test_offset_pages_without_overlap(self, client):
+        self._seed(client, 4)
+        first = client.get("/api/measurements/?metric=peso&limit=2&offset=0").json()
+        second = client.get("/api/measurements/?metric=peso&limit=2&offset=2").json()
+        assert [len(first), len(second)] == [2, 2]
+        assert len({row["id"] for row in first + second}) == 4
+
+    @pytest.mark.parametrize("query", ["limit=abc", "offset=-1"])
+    def test_unparseable_window_is_400_not_500(self, client, query):
+        assert client.get(f"/api/measurements/?metric=peso&{query}").status_code == 400
+
+    def test_paging_stays_scoped_to_the_user(self, client, other_client):
+        self._seed(client, 3)
+        self._seed(other_client, 1)
+        assert len(client.get("/api/measurements/?metric=peso&offset=1").json()) == 2
+        assert len(other_client.get("/api/measurements/?metric=peso&offset=1").json()) == 0

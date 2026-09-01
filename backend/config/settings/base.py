@@ -121,6 +121,10 @@ KIND_MEASUREMENT = "measurement"
 DEFAULT_SESSION_METRIC = "estudio"
 DEFAULT_SESSION_LIMIT = 50
 DEFAULT_MEASUREMENT_LIMIT = 100
+# Ceiling on any `limit` a list view will honour, however large the query asks.
+# Sized so the weight page can still fetch its whole series in one request: the
+# trend chart needs every point, so that list is capped, never paged.
+MAX_LIST_LIMIT = 1000
 DEFAULT_STATS_DAYS = 14
 DEFAULT_STATS_WEEKS = 12
 
